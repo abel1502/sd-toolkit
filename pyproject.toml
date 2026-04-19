@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sd-toolkit"
+dynamic = ["version"]
+description = "A suite of tools to assist in dataset preparation, LoRA training and LoRA management. Made for personal use."
+readme = "README.md"
+requires-python = ">=3.14"
+authors = [
+  { name = "abel1502" },
+]
+dependencies = []
+
+[project.urls]
+Documentation = "https://github.com/abel1502/sd-toolkit#readme"
+Issues = "https://github.com/abel1502/sd-toolkit/issues"
+Source = "https://github.com/abel1502/sd-toolkit"
+
+[tool.hatch.version]
+path = "src/sd_toolkit/__about__.py"
+
+[tool.coverage.run]
+source_pkgs = ["sd_toolkit", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/sd_toolkit/__about__.py",
+]
+
+[tool.coverage.paths]
+sd_toolkit = ["src/sd_toolkit", "*/sd-toolkit/src/sd_toolkit"]
+tests = ["tests", "*/sd-toolkit/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
