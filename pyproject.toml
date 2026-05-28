@@ -12,6 +12,9 @@ authors = [
   { name = "abel1502" },
 ]
 dependencies = []
+classifiers = [
+  "Private :: Do Not Upload",
+]
 
 [project.urls]
 Documentation = "https://github.com/abel1502/sd-toolkit#readme"
@@ -35,7 +38,8 @@ tests = ["tests", "*/sd-toolkit/tests"]
 
 [tool.coverage.report]
 exclude_lines = [
-  "no cov",
+  "no cover",
   "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+  "if (typing\\.)?TYPE_CHECKING:",
+  "^\\s*\\.\\.\\.\\s*($|#)",
 ]
