@@ -1,0 +1,15 @@
+- [x] git repo
+- [x] `pyproject.toml` (hatchling?), editable install
+- [ ] Reorganize the utilities
+- [ ] Expose something equivalent to the old interface for backwards compatibility
+- [ ] Migrate existing scripts in my_loras
+- [ ] Remove the old files from `C:\AI\source_images\grabber`
+
+- [ ] Training supervision module (auto-add `.civitai.info` and `.json`, callback for making previews, copy to _my)
+- [ ] Incorporate `_process_civitai.py`, `_add_metadata.py`, , etc.?
+- [ ] Add the new (to be written) script for converting gallery-dl scrapes into regular dataset tags
+- [ ] Better dataset prep utilities. Maybe use an actual UI instead of the jupyter hacks? Or maybe stick with jupyter, but use my own html or something.
+  - Really need to think of a better way to select a bunch of images
+  - Integrate AI-tagging
+  - Cannibalize traintrain a bit
+- [ ] ...
