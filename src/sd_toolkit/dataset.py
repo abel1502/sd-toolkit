@@ -20,7 +20,7 @@ class Dataset:
     root: pathlib.Path
     contents: list[TaggedImage]
     
-    _IMAGE_FILE_EXT: typing.Final[re.Pattern] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
+    _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
     
     @classmethod
     def discover_files(
