@@ -157,6 +157,8 @@ class Tags:
                 inplace=True)
         
         return self
+    
+    # TODO: convert_pixiv_to_booru. Query (and persistently cache!) the danbooru wiki, or optionally ask the user.
 
 
 __all__ = [
