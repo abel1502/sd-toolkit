@@ -14,7 +14,6 @@ authors = [
 dependencies = [
     "attrs>=26.1.0",
     "loguru>=0.7.3",
-    "polars[pyarrow,pydantic]>=1.41.1",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "requests>=2.34.2",
