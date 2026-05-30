@@ -103,7 +103,7 @@ class Tags:
         self._tags = {x for xs in map(func, self._tags) for x in Tags.cast(xs)}
         return self
     
-    _BAD_TAGS_RE = re.compile(r"""
+    _BAD_TAGS_RE: typing.Final[re.Pattern] = re.compile(r"""
         tagme |
         commentary |
         .*_commentary |
@@ -121,8 +121,8 @@ class Tags:
         """,
         re.VERBOSE,
     )
-    _MULTI_SPACE_RE = re.compile(r"\s+")
-    _ESCAPE_TRANSLATION_TABLE = str.maketrans({
+    _MULTI_SPACE_RE: typing.Final[re.Pattern] = re.compile(r"\s+")
+    _ESCAPE_TRANSLATION_TABLE: typing.Final[dict[int, str]] = str.maketrans({
         "(": "\\(",
         ")": "\\)",
         "[": "\\[",
