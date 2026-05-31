@@ -4,6 +4,7 @@ import copy
 
 from attrs import define, field
 from attrs.validators import instance_of
+from sortedcontainers import SortedSet
 
 
 type TagsLike = Tags | str | typing.Collection[str]
@@ -11,7 +12,7 @@ type TagsLike = Tags | str | typing.Collection[str]
 
 @define(str=False, repr=False, eq=True, order=False)
 class Tags:
-    _tags: set[str] = field(factory=set, validator=instance_of(set))
+    _tags: SortedSet[str] = field(factory=SortedSet, validator=instance_of(SortedSet))
     
     @classmethod
     def cast(cls, tags: TagsLike) -> Tags:
@@ -19,11 +20,11 @@ class Tags:
             return tags
         if isinstance(tags, str):
             return cls.parse(tags)
-        return cls(set(tags))
+        return cls(SortedSet(tags))
     
     @classmethod
     def parse(cls, text: str, separator: str = ",") -> Tags:
-        return cls({x for x in map(str.strip, text.split(separator)) if x})
+        return cls(SortedSet(x for x in map(str.strip, text.split(separator)) if x))
     
     def clone(self) -> Tags:
         return copy.deepcopy(self)
@@ -39,7 +40,7 @@ class Tags:
         return f"Tags({self._tags!r})"
     
     def __rich_repr__(self) -> typing.Generator[typing.Any | tuple[str, typing.Any] | tuple[str, typing.Any, typing.Any], None, None]:
-        yield from self.sorted()
+        yield from self
     
     def __len__(self) -> int:
         return len(self._tags)
@@ -49,9 +50,6 @@ class Tags:
     
     def __iter__(self) -> typing.Iterator[str]:
         return iter(self._tags)
-    
-    def sorted(self, *, key: typing.Callable[[str], typing.Any] | None = None, reverse: bool = False) -> list[str]:
-        return sorted(self._tags, key=key, reverse=reverse)
     
     def pipe[T](self, func: typing.Callable[[Tags], T]) -> T:
         return func(self)

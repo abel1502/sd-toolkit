@@ -19,6 +19,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "requests>=2.34.2",
     "rich>=15.0.0",
+    "sortedcontainers>=2.4.0",
     "sqlitedict>=2.1.0",
     "tqdm>=4.67.3",
 ]
