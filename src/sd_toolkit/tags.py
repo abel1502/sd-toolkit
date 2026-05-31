@@ -1,7 +1,9 @@
 import typing
 import re
+import copy
 
 from attrs import define, field
+from attrs.validators import instance_of
 
 
 type TagsLike = Tags | str | typing.Collection[str]
@@ -9,7 +11,7 @@ type TagsLike = Tags | str | typing.Collection[str]
 
 @define(str=False, repr=False, eq=True, order=False)
 class Tags:
-    _tags: set[str] = field(factory=set)
+    _tags: set[str] = field(factory=set, validator=instance_of(set))
     
     @classmethod
     def cast(cls, tags: TagsLike) -> Tags:
@@ -17,17 +19,14 @@ class Tags:
             return tags
         if isinstance(tags, str):
             return cls.parse(tags)
-        return cls(tags)
+        return cls(set(tags))
     
     @classmethod
-    def parse(cls, text: str) -> Tags:
-        return cls([x for x in map(str.strip, text.split(',')) if x])
+    def parse(cls, text: str, separator: str = ",") -> Tags:
+        return cls({x for x in map(str.strip, text.split(separator)) if x})
     
     def clone(self) -> Tags:
-        return Tags(self)
-    
-    def __copy__(self) -> Tags:
-        return self.clone()
+        return copy.deepcopy(self)
     
     def to_str(self, *, trailing_comma: bool = True) -> str:
         items = self.sorted()
