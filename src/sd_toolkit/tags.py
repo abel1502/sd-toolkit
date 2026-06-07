@@ -12,6 +12,10 @@ type TagsLike = Tags | str | typing.Collection[str]
 
 @define(str=False, repr=False, eq=True, order=False)
 class Tags:
+    # TODO: nanotable.Table[Tag], a struct with metadata (tag itself, category, trigger word flag, origin, confidence, order precedence key). Maybe even allow duplicates?
+    # Actually, primary key field can be a list of strings, representing the hierarchical path for the tag. For example, ["1", "ibarazaki_emi", "blonde_hair"].
+    # Then lexicographic order will naturally group subtags after parent. Only include the final tag in the string. "1" in this example is a group without a parent, only affecting the order.
+    # Have a separate @property (with a setter) for the actual tag (final item of the list)
     _tags: SortedSet[str] = field(factory=SortedSet, validator=instance_of(SortedSet))
     
     @classmethod

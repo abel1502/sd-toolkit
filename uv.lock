@@ -168,6 +168,18 @@ wheels = [
 ]
 
 [[package]]
+name = "nanotable"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/48/4d557a8e8ada3bac52353e070661f13a9f41da4f88469e7d4fc442b43445/nanotable-0.1.1.tar.gz", hash = "sha256:0dd4158ed853a6d6bcdb77237bd30379a367721e8c45f8a0ea9e4604238625a7", size = 47813, upload-time = "2026-06-04T14:25:17.264Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ea/28/1d838acb85c27cc4b64ecb77b38adae51b5f000d15b80143f96da926a1c2/nanotable-0.1.1-py3-none-any.whl", hash = "sha256:adcc57b24a714e9a5f1c4d03e0997db7619e9482c4450bfb04c82d52e2be3abe", size = 24078, upload-time = "2026-06-04T14:25:18.091Z" },
+]
+
+[[package]]
 name = "orjson"
 version = "3.11.9"
 source = { registry = "https://pypi.org/simple" }
@@ -312,6 +324,7 @@ dependencies = [
     { name = "attrs" },
     { name = "cattrs", extra = ["cbor2", "orjson"] },
     { name = "loguru" },
+    { name = "nanotable" },
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "requests" },
@@ -326,6 +339,7 @@ requires-dist = [
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "cattrs", extras = ["cbor2", "orjson"], specifier = ">=26.1.0" },
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "nanotable", specifier = ">=0.1.1" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "requests", specifier = ">=2.34.2" },
