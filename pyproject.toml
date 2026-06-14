@@ -14,8 +14,9 @@ authors = [
 dependencies = [
     "attrs>=26.1.0",
     "cattrs[cbor2,orjson]>=26.1.0",
+    "frozendict>=2.4.7",
     "loguru>=0.7.3",
-    "nanotable>=0.1.1",
+    "nanotable[sorted]>=0.1.1",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "requests>=2.34.2",
@@ -23,6 +24,8 @@ dependencies = [
     "sortedcontainers>=2.4.0",
     "sqlitedict>=2.1.0",
     "tqdm>=4.67.3",
+    "types-frozendict>=2.0.9",
+    "typing-extensions>=4.15.0",
 ]
 classifiers = [
   "Private :: Do Not Upload",
@@ -54,4 +57,10 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if (typing\\.)?TYPE_CHECKING:",
   "^\\s*\\.\\.\\.\\s*($|#)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+    "pytest-cov>=7.1.0",
 ]

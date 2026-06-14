@@ -12,7 +12,7 @@ from cattrs.preconf import cbor2 as cattrs_cbor2
 from pydantic import BaseModel
 
 from sd_toolkit.tags import Tags
-from sd_toolkit.naming_strategy import NamingStrategy, DefaultNamingStrategy
+from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 
 
 @define()
@@ -158,7 +158,7 @@ class Dataset:
         self,
         dest: pathlib.Path | str,
         *,
-        naming_strategy: NamingStrategy = DefaultNamingStrategy(),
+        naming_strategy: NamingStrategy = DefaultNaming(),
         use_links: bool = True,
         overwrite: bool = False,
         then_zip: bool = False,
@@ -180,7 +180,7 @@ class Dataset:
             dest.mkdir(parents=True, exist_ok=True)
         
         for img in self.contents:
-            dest_img_path = naming_strategy.get_dst_path(dest, img.path.relative_to(self.root))
+            dest_img_path = naming_strategy(dest, img.path.relative_to(self.root))
             dest_tags_path = dest_img_path.with_suffix(".txt")
             
             assert not dest_img_path.exists()
@@ -225,6 +225,8 @@ class Dataset:
         return copy.deepcopy(self)
     
     _CBOR_CONVERTER: typing.ClassVar[typing.Final[cattrs_cbor2.Cbor2Converter]] = cattrs_cbor2.make_converter()
+    # _CBOR_CONVERTER.register_structure_hook(Tags, lambda data, cls: )
+    # _CBOR_CONVERTER.register_unstructure_hook(Tags, lambda data, cls: )
     
     def save_checkpoint(self, path: pathlib.Path | str, overwrite: bool = False) -> None:
         if isinstance(path, str):
