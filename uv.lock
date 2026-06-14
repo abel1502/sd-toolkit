@@ -12,6 +12,15 @@ wheels = [
 ]
 
 [[package]]
+name = "anyquests"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/cf/6879b70a541562998b91189ee200b58e9eb07766564e7d7a2aecd9b2b7a0/anyquests-1.0.1.tar.gz", hash = "sha256:953fccf1b97a5f9b6eb9b2ba18ec057b3b0aa975b1c58c18aaa01afc41660987", size = 7148, upload-time = "2026-06-01T12:00:43.192Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ac/13/03459c73085e39929bcefd055570eda746083307f58e5a229120c42eeda3/anyquests-1.0.1-py3-none-any.whl", hash = "sha256:ebf7995e2e2c0826467ebd46b5bcc3e9232621e927e03ba216acfbfe00cd3e6a", size = 7992, upload-time = "2026-06-01T12:00:42.247Z" },
+]
+
+[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -432,6 +441,7 @@ wheels = [
 name = "sd-toolkit"
 source = { editable = "." }
 dependencies = [
+    { name = "anyquests" },
     { name = "attrs" },
     { name = "cattrs", extra = ["cbor2", "orjson"] },
     { name = "frozendict" },
@@ -456,6 +466,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyquests", specifier = ">=1.0.1" },
     { name = "attrs", specifier = ">=26.1.0" },
     { name = "cattrs", extras = ["cbor2", "orjson"], specifier = ">=26.1.0" },
     { name = "frozendict", specifier = ">=2.4.7" },

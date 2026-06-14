@@ -10,8 +10,6 @@ import typing_extensions
 from frozendict import frozendict
 from nanotable import Table, SortedUniqueIndex, SortedMultiIndex, ConflictError
 
-from sd_toolkit.metadata_strategy import MetadataStrategy, CombineMetadata
-
 
 type TagLike = Tag | str | tuple[str, ...]
 
@@ -97,7 +95,7 @@ class Tag:
     def renamed(self, tag: str) -> Tag:
         return self.moved(self.path[:-1] + (tag,))
     
-    def with_metadata(self, **metadata: typing.Unpack[TagMetadata]) -> Tag:
+    def with_metadata(self, /, **metadata: typing.Unpack[TagMetadata]) -> Tag:
         return attrs.evolve(self, metadata=self.metadata | metadata)
     
     def strip_metadata(
@@ -366,7 +364,23 @@ class Tags:
         from_ = Tag.cast(from_)
         return self.move(from_, from_.renamed(to), match=match, with_children=with_children)
     
-    # TODO: Metadata operations
+    def add_metadata(
+        self,
+        pred: typing.Callable[[Tag], bool] = lambda tag: True,
+        /,
+        **metadata: typing.Unpack[TagMetadata],
+    ) -> typing.Self:
+        return self.map(lambda tag: tag.with_metadata(**metadata) if pred(tag) else tag)
+    
+    def mark_trigger(
+        self,
+        pred: typing.Callable[[Tag], bool] = lambda tag: True,
+        clear_rest: bool = False,
+    ) -> typing.Self:
+        self.add_metadata(pred, is_trigger=True)
+        if clear_rest:
+            self.add_metadata(lambda tag: not pred(tag), is_trigger=False)
+        return self
     
     def filter(self, func: typing.Callable[[Tag], bool]) -> typing.Self:
         new: list[Tag] = []

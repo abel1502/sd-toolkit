@@ -12,6 +12,7 @@ authors = [
   { name = "abel1502" },
 ]
 dependencies = [
+    "anyquests>=1.0.1",
     "attrs>=26.1.0",
     "cattrs[cbor2,orjson]>=26.1.0",
     "frozendict>=2.4.7",
