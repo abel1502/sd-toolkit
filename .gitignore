@@ -3,3 +3,6 @@ __pycache__
 .coverage
 /old
 __marimo__
+node_modules
+/src/sd_toolkit/static
+

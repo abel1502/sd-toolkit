@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-build-scripts"]
 build-backend = "hatchling.build"
 
 [project]
@@ -13,6 +13,7 @@ authors = [
 ]
 dependencies = [
     "anyquests>=1.0.1",
+    "anywidget>=0.11.0",
     "attrs>=26.1.0",
     "cattrs[cbor2,orjson]>=26.1.0",
     "frozendict>=2.4.7",
@@ -32,6 +33,13 @@ classifiers = [
   "Private :: Do Not Upload",
 ]
 
+[dependency-groups]
+dev = [
+    "anywidget[dev]>=0.11.0",
+    "pytest>=9.1.0",
+    "pytest-cov>=7.1.0",
+]
+
 [project.urls]
 Documentation = "https://github.com/abel1502/sd-toolkit#readme"
 Issues = "https://github.com/abel1502/sd-toolkit/issues"
@@ -39,6 +47,15 @@ Source = "https://github.com/abel1502/sd-toolkit"
 
 [tool.hatch.version]
 path = "src/sd_toolkit/__about__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sd_toolkit"]
+artifacts = ["src/sd_toolkit/static"]
+
+[[tool.hatch.build.hooks.build-scripts.scripts]]
+work_dir = "widget_svelte"
+commands = ["pnpm run build"]
+
 
 [tool.coverage.run]
 source_pkgs = ["sd_toolkit", "tests"]
@@ -58,10 +75,4 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if (typing\\.)?TYPE_CHECKING:",
   "^\\s*\\.\\.\\.\\s*($|#)",
-]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.1.0",
-    "pytest-cov>=7.1.0",
 ]
