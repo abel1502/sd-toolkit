@@ -12,5 +12,6 @@ class TaggerWidget(anywidget.AnyWidget):
     _esm = STATIC / "index.js"
     _css = STATIC / "styles.css"
 
-    image_path = traitlets.Unicode().tag(sync=True)
+    image: str = traitlets.Unicode().tag(sync=True)
+    tags: typing.Mapping[str, bool] = traitlets.Dict().tag(sync=True)  # TODO: Nested structure instead. Or flat with tuple keys. Or list of objects.
 
