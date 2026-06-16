@@ -15,6 +15,7 @@
   // - Separate input and output bindings
   // - Show when an image was already handled (a checkmark?)
   // - Maybe let the user resize the widget? Would be nice.
+  // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   interface Bindings {
     image: string;
     tags: Record<string, boolean>;  // TODO: Actually nested
