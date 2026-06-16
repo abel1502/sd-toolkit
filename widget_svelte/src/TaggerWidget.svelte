@@ -16,6 +16,7 @@
   // - Show when an image was already handled (a checkmark?)
   // - Maybe let the user resize the widget? Would be nice.
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
+  // - Break up into subcomponents!
   interface Bindings {
     image: string;
     tags: Record<string, boolean>;  // TODO: Actually nested
@@ -94,7 +95,8 @@
       onclick={() => goToImage(cur_image_idx - 1)}
       disabled={cur_image_idx == 0}
     >
-      <Icon icon="ci:chevron-left" class="align-middle" /> Previous
+      <Icon icon="ci:chevron-left" class="align-middle" />
+      Previous
     </button>
 
     <div class="flex-1 h-full relative">
@@ -120,7 +122,8 @@
       onclick={() => goToImage(cur_image_idx + 1)}
       disabled={cur_image_idx == total_images}
     >
-      Next <Icon icon="ci:chevron-right" class="align-middle" />
+      Next
+      <Icon icon="ci:chevron-right" class="align-middle" />
     </button>
   </div>
 
