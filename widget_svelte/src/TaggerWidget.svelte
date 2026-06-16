@@ -1,7 +1,13 @@
-<svelte:options runes={true} />
-
 <script lang="ts">
   import type { AnyModel } from "@anywidget/types";
+  import { Confetti } from "svelte-confetti";
+  import { slide } from "svelte/transition";
+  import Icon from "@iconify/svelte";
+  /*
+  Used icon packs: (attribution, as per their licenses)
+  - coolicons by Kryston Schwarze, CC BY 4.0
+    https://icon-sets.iconify.design/ci/
+  */
 
   interface Bindings {
     image: string;
@@ -9,83 +15,106 @@
   }
 
   interface Props {
-    model: AnyModel<Bindings>;
+    model?: AnyModel<Bindings>;
     bindings?: Bindings;
   };
 
   let { model, bindings }: Props = $props();
-  let { image, tags } = $derived(bindings ?? { image: '', tags: {} });
+  let { image, tags } = $derived(bindings ?? {image: "", tags: {}});
 
   function toggleTag(tagName: string) {
     if (bindings) {
       bindings.tags = { ...tags, [tagName]: !tags[tagName] };
     }
   }
+
+  let cur_image_idx = $state(0);
+  // TODO: desired_image_idx
+  let total_images = $state(10);
+  let percentage = $derived(cur_image_idx / total_images);
+  let is_done = $derived(cur_image_idx == total_images)
+
+  function goToImage(idx: number) {
+    cur_image_idx = Math.max(0, Math.min(idx, total_images));
+  }
+
+  let width: number | undefined = $state()
 </script>
 
 
-<!-- <img src={bindings?.image_path} alt="" /> -->
-<!-- <p>Hello! Displaying {bindings?.image_path}</p> -->
-
-<!-- <div>
-  <div class="bg-blue-500 text-black font-bold rounded-full px-4 py-1 w-min">test</div>
-</div> -->
-
-<!-- TODO: Clean up styles -->
-
-<div class="flex flex-col w-full max-w-4xl p-4 border rounded-lg bg-white shadow-sm">
-
-  <div class="flex flex-row md:flex-row gap-6 grow">
-    
-    <div class="w-full md:w-1/3 bg-gray-100 rounded-lg flex items-center justify-center border overflow-hidden">
-      {#if image}
-        <img 
-          src={image} 
-          alt="Preview" 
-          class="w-full h-64 object-cover"
-        />
-      {:else}
-        <span class="text-gray-400 text-sm">No Image</span>
+<div
+  class="flex flex-col w-full min-w-xl max-w-4xl p-4 border rounded-lg bg-white shadow-sm"
+  bind:clientWidth={width}
+>
+  {#if is_done}
+    <div class="grid place-items-center h-16 border p-4 rounded-lg bg-green-200 shadow-sm">
+      {#if total_images > 0}
+        <Confetti x={[-width / 400.0, width / 400.0]} y={[-0.5, 0.25]} amount={100} />
       {/if}
+      <span class="text-green-800 font-bold absolute">Done!</span>
     </div>
-    
-    <div class="flex-1 flex flex-row flex-wrap gap-2 h-min">
-      {#each Object.keys(tags) as tagName}
-        <button
-          class={`
-            px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200
-            ${tags[tagName] 
-              ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300' 
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
-          `}
-          onclick={() => toggleTag(tagName)}
-        >
-          {tagName}
-        </button>
-      {/each}
+  {:else}
+    <div class="flex flex-row gap-6" transition:slide>
+      <div class="flex-1 flex aspect-square bg-gray-100 rounded-lg items-center justify-center border">
+        {#if image}
+          <img src={image} alt="Preview" class="w-ful h-full object-contain rounded-lg overflow-hidden"/>
+        {:else}
+          <span class="text-gray-400 text-sm">No Image</span>
+        {/if}
+      </div>
+      
+      <div class="flex-1 flex flex-row flex-wrap gap-2 py-1">
+        {#each Object.keys(tags) as tagName}
+          <button
+            class={[
+              "px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 h-min",
+              tags[tagName] 
+                ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300" 
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+            ]}
+            onclick={() => toggleTag(tagName)}
+          >
+            {tagName}
+          </button>
+        {/each}
+      </div>
     </div>
-
-  </div>
+  {/if}
 
   <div class="mt-6 flex flex-row items-center gap-4">
     <button 
-      class="px-4 py-2 border rounded hover:bg-gray-50 text-gray-700"
-      disabled
+      class="flex flex-row p-2 pl-3 pr-4 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
+      onclick={() => goToImage(cur_image_idx - 1)}
+      disabled={cur_image_idx == 0}
     >
-      &larr; Previous
+      <Icon icon="ci:chevron-left" class="align-middle" /> Previous
     </button>
 
-    <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-      <div class="w-1/3 h-full bg-blue-500"></div>
+    <div class="flex-1 h-full relative">
+      <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-blue-500 transition-[width] duration-300"
+          style:--progress={percentage}
+          style:width="calc(var(--progress) * 100%)"
+          style:anchor-name="--progressbar"
+        ></div>
+      </div>
+      <span
+        class="absolute text-black"
+        style:position-anchor="--progressbar"
+        style:position-area="bottom span-left"
+      >
+        {cur_image_idx}/{total_images}
+      </span>
     </div>
 
     <button 
-      class="px-4 py-2 border rounded hover:bg-gray-50 text-gray-700"
+      class="flex flex-row p-2 pl-4 pr-3 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
+      onclick={() => goToImage(cur_image_idx + 1)}
+      disabled={cur_image_idx == total_images}
     >
-      Next &rarr;
+      Next <Icon icon="ci:chevron-right" class="align-middle" />
     </button>
   </div>
 
 </div>
-
-

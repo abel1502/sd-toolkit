@@ -216,7 +216,13 @@ importers:
       svelte:
         specifier: ^5.56.3
         version: 5.56.3
+      svelte-confetti:
+        specifier: ^2.3.2
+        version: 2.3.2(svelte@5.56.3)
     devDependencies:
+      '@iconify/svelte':
+        specifier: ^5.2.2
+        version: 5.2.2(svelte@5.56.3)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.1.2
         version: 7.1.2(svelte@5.56.3)(vite@8.0.16(jiti@2.7.0))
@@ -254,6 +260,14 @@ packages:
 
   '@emnapi/wasi-threads@1.2.1':
     resolution: {integrity: sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w==}
+
+  '@iconify/svelte@5.2.2':
+    resolution: {integrity: sha512-XMXxD3nzH7yB68C3K4sNwzrJ1TBscODR0ZqCeNf0KGuEMCTSuCo0jHNDZ0o0iRXTylO41NSz/DWam/4atLG1yw==}
+    peerDependencies:
+      svelte: '>5.0.0'
+
+  '@iconify/types@2.0.0':
+    resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -669,6 +683,11 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
+  svelte-confetti@2.3.2:
+    resolution: {integrity: sha512-cfIwoGqMPYWRYDUz2g7mG1uHYWy7VBepelQdzCC3j/M42UrAqaBYmIi9xaoQfow4fbINHO9WuARnTyK2bjjGQg==}
+    peerDependencies:
+      svelte: '>=5.0.0'
+
   svelte@5.56.3:
     resolution: {integrity: sha512-w7JvrM5IFl5cmfbY0TLik9o7mjRUJmRMhOR51tBPu708Gr/MjbGs7VnJnr/B0CaXeI4vtnOh7RKxDr0cwhMdDA==}
     engines: {node: '>=18'}
@@ -770,6 +789,13 @@ snapshots:
     dependencies:
       tslib: 2.8.1
     optional: true
+
+  '@iconify/svelte@5.2.2(svelte@5.56.3)':
+    dependencies:
+      '@iconify/types': 2.0.0
+      svelte: 5.56.3
+
+  '@iconify/types@2.0.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -1071,6 +1097,10 @@ snapshots:
       '@rolldown/binding-win32-x64-msvc': 1.0.3
 
   source-map-js@1.2.1: {}
+
+  svelte-confetti@2.3.2(svelte@5.56.3):
+    dependencies:
+      svelte: 5.56.3
 
   svelte@5.56.3:
     dependencies:

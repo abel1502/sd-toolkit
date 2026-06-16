@@ -12,13 +12,13 @@ export default defineConfig({
     tailwindcss(),
   ],
   build: {
+    outDir: "../src/sd_toolkit/static",
     lib: {
       entry: "./src/index.ts",
       fileName: "index",
       cssFileName: "styles",
       formats: ["es"],
     },
-    outDir: "../src/sd_toolkit/static",
     emptyOutDir: true,
     cssCodeSplit: false,
   },
