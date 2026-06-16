@@ -9,6 +9,12 @@
     https://icon-sets.iconify.design/ci/
   */
 
+  // TODO: Match the python side.
+  // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
+  // - Hotkeys
+  // - Separate input and output bindings
+  // - Show when an image was already handled (a checkmark?)
+  // - Maybe let the user resize the widget? Would be nice.
   interface Bindings {
     image: string;
     tags: Record<string, boolean>;  // TODO: Actually nested
@@ -20,7 +26,7 @@
   };
 
   let { model, bindings }: Props = $props();
-  let { image, tags } = $derived(bindings ?? {image: "", tags: {}});
+  let { image = "", tags = {} } = $derived(bindings!!);
 
   function toggleTag(tagName: string) {
     if (bindings) {
