@@ -3,6 +3,7 @@ import pathlib
 
 import anywidget
 import traitlets
+import attrs
 from attrs import define, field
 import cattrs
 from loguru import logger
@@ -29,6 +30,10 @@ class TagInfo:
 class ToggleTagMessage:
     path: tuple[str, ...]
     present: bool
+
+
+attrs.resolve_types(TagGroupInfo)
+attrs.resolve_types(TagInfo)
 
 
 def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:

@@ -479,6 +479,10 @@ class Tags:
     # TODO: convert_pixiv_to_booru. Query (and persistently cache!) the danbooru wiki, or optionally ask the user.
 
 
+attrs.resolve_types(Tag)
+attrs.resolve_types(Tags)
+
+
 __all__ = [
     "TagLike",
     "TagMetadata",

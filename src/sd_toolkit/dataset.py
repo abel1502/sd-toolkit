@@ -6,6 +6,7 @@ from compression.zstd import ZstdFile
 import shutil
 
 from loguru import logger
+import attrs
 from attrs import define, field
 import cbor2
 from cattrs.preconf import cbor2 as cattrs_cbor2
@@ -255,6 +256,10 @@ class Dataset:
         return result
 
     # TODO: Tags accessor
+
+
+attrs.resolve_types(TaggedImage)
+attrs.resolve_types(Dataset)
 
 
 # TODO: Dataset view/subset?
