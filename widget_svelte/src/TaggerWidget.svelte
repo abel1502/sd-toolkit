@@ -87,8 +87,8 @@
       <span class="text-green-800 font-bold absolute">Done!</span>
     </div>
   {:else}
-    <div class="flex flex-row gap-6" transition:slide>
-      <div class="flex aspect-square w-2xl h-2xl bg-gray-100 rounded-lg items-center justify-center border overflow-hidden">
+    <div class="flex flex-row gap-6 resize-y min-h-32 max-h-[50vw] overflow-hidden" transition:slide>
+      <div class="flex aspect-square h-full bg-gray-100 rounded-lg items-center justify-center border overflow-hidden">
         {#if image}
           <img src={image} alt="Preview" class="w-full h-full object-contain"/>
         {:else}
