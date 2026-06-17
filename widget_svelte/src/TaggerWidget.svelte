@@ -20,6 +20,8 @@
   // - Maybe let the user resize the widget and parts of it? Would be nice.
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   // - Break up into subcomponents!
+  // - Use svelte-splitpanes! Two panes horizontally, all in a vertical pane. Scroll or auto-zoom on vertical overflow
+  // - Bigger group toggle button; group identifiers to communicate the group toggle event. Possibly let the first tag act as the group representative?
   interface Bindings {
     // Input only
     image: string;
@@ -40,7 +42,7 @@
     bindings: Bindings;
   };
 
-  let { model, bindings }: Props = $props();
+  let { model, bindings }: Partial<Props> = $props();
 
   let image = $derived(bindings?.image || "");
   let tags = $derived(bindings?.tags || []);
@@ -74,7 +76,7 @@
 
 
 <div
-  class="flex flex-col w-full min-w-xl max-w-4xl p-4 border rounded-lg bg-white shadow-sm"
+  class="flex flex-col w-full min-w-2xl p-4 border rounded-lg bg-white shadow-sm"
   bind:clientWidth={width}
 >
   {#if is_done}
@@ -86,9 +88,9 @@
     </div>
   {:else}
     <div class="flex flex-row gap-6" transition:slide>
-      <div class="flex-1 flex aspect-square bg-gray-100 rounded-lg items-center justify-center border">
+      <div class="flex aspect-square w-2xl h-2xl bg-gray-100 rounded-lg items-center justify-center border overflow-hidden">
         {#if image}
-          <img src={image} alt="Preview" class="w-ful h-full object-contain rounded-lg overflow-hidden"/>
+          <img src={image} alt="Preview" class="w-full h-full object-contain"/>
         {:else}
           <span class="text-gray-400 text-sm">No Image</span>
         {/if}
@@ -100,7 +102,7 @@
     </div>
   {/if}
 
-  <div class="mt-6 mx-2 flex flex-row items-center gap-4">
+  <div class="mt-6 mx-2 w-full flex flex-row items-center gap-4">
     <button 
       class="flex flex-row p-2 pl-3 pr-4 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
       onclick={() => goToImage(curImageIdx - 1)}
