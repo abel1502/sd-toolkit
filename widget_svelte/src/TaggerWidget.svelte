@@ -10,21 +10,14 @@
     https://icon-sets.iconify.design/ci/
   */
 
-  interface TagGroupInfo {
-    tags: {
-      tag: string;
-      path: string[];
-      present: boolean;
-    }[];
-    subgroups: TagGroupInfo[];
-    hotkey: string | null;
-  }
+  import type { TagGroupInfo, TagInfo } from "./types";
+  import TagGroups from "./TagGroups.svelte";
 
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
   // - Hotkeys
   // - Show when an image was already handled (a checkmark?)
-  // - Maybe let the user resize the widget? Would be nice.
+  // - Maybe let the user resize the widget and parts of it? Would be nice.
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   // - Break up into subcomponents!
   interface Bindings {
@@ -33,6 +26,7 @@
     tags: TagGroupInfo[];
     image_idx: number;
     image_count: number;
+
     // Output only
     toggle_tag: {
       path: string[];
@@ -42,8 +36,8 @@
   }
 
   interface Props {
-    model?: AnyModel<Bindings>;
-    bindings?: Bindings;
+    model: AnyModel<Bindings>;
+    bindings: Bindings;
   };
 
   let { model, bindings }: Props = $props();
@@ -100,20 +94,8 @@
         {/if}
       </div>
       
-      <div class="flex-1 flex flex-row flex-wrap gap-2 py-1">
-        <!-- {#each Object.keys(tags) as tagName}
-          <button
-            class={[
-              "px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 h-min",
-              tags[tagName] 
-                ? "bg-blue-100 text-blue-800 ring-1 ring-blue-300" 
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200",
-            ]}
-            onclick={() => toggleTag(tagName)}
-          >
-            {tagName}
-          </button>
-        {/each} -->
+      <div class="flex-1 py-1">
+        <TagGroups tags={tags} />
       </div>
     </div>
   {/if}
