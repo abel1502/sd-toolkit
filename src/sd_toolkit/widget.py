@@ -38,8 +38,8 @@ class ToggleTagMessage:
 
 def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
     return dict(
-        to_json=lambda obj: cattrs.unstructure(obj),
-        from_json=lambda obj: cattrs.structure(obj, as_type),
+        to_json=lambda obj, manager: cattrs.unstructure(obj),
+        from_json=lambda obj, manager: cattrs.structure(obj, as_type),
     )
 
 
