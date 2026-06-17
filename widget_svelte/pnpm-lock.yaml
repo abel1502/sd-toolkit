@@ -222,9 +222,6 @@ importers:
       svelte-confetti:
         specifier: ^2.3.2
         version: 2.3.2(svelte@5.56.3)
-      svelte-splitpanes:
-        specifier: ^8.0.12
-        version: 8.0.12(svelte@5.56.3)
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.1.2
@@ -694,11 +691,6 @@ packages:
     peerDependencies:
       svelte: '>=5.0.0'
 
-  svelte-splitpanes@8.0.12:
-    resolution: {integrity: sha512-HJ07HgbtY0Q/35TEuJquGy47dtgCVavV7ay9r1FhWRx3boyUs3RpeiHlwMKliznCKy2ZotNeT+8GG+mIoNjgRA==}
-    peerDependencies:
-      svelte: ^5.43.0
-
   svelte@5.56.3:
     resolution: {integrity: sha512-w7JvrM5IFl5cmfbY0TLik9o7mjRUJmRMhOR51tBPu708Gr/MjbGs7VnJnr/B0CaXeI4vtnOh7RKxDr0cwhMdDA==}
     engines: {node: '>=18'}
@@ -1116,10 +1108,6 @@ snapshots:
   source-map-js@1.2.1: {}
 
   svelte-confetti@2.3.2(svelte@5.56.3):
-    dependencies:
-      svelte: 5.56.3
-
-  svelte-splitpanes@8.0.12(svelte@5.56.3):
     dependencies:
       svelte: 5.56.3
 

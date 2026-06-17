@@ -17,10 +17,10 @@
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
   // - Hotkeys. A switch in the corner to listen for them.
   // - Show when an image was already handled (a checkmark?)
-  // - Maybe let the user resize the widget and parts of it? Would be nice.
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   // - Break up into subcomponents!
-  // - Use svelte-splitpanes! Two panes horizontally, all in a vertical pane. Scroll or auto-zoom on vertical overflow
+  // - Maybe let the user resize the widget and parts of it? Would be nice.
+  //   - Use paneforge or something. Two panes horizontally, all in a vertical pane. Scroll or auto-zoom on vertical overflow
   // - Bigger group toggle button; group identifiers to communicate the group toggle event. Possibly let the first tag act as the group representative?
   interface Bindings {
     // Input only
