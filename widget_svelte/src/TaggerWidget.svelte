@@ -15,7 +15,7 @@
 
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
-  // - Hotkeys
+  // - Hotkeys. A switch in the corner to listen for them.
   // - Show when an image was already handled (a checkmark?)
   // - Maybe let the user resize the widget and parts of it? Would be nice.
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
