@@ -14,11 +14,11 @@
   "dependencies": {
     "@anywidget/svelte": "^0.1.2",
     "@anywidget/types": "^0.4.0",
+    "@iconify-svelte/ci": "^1.0.2",
     "svelte": "^5.56.3",
     "svelte-confetti": "^2.3.2"
   },
   "devDependencies": {
-    "@iconify/svelte": "^5.2.2",
     "@sveltejs/vite-plugin-svelte": "^7.1.2",
     "@tailwindcss/vite": "^4.3.1",
     "postcss": "^8.5.15",

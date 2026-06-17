@@ -2,7 +2,8 @@
   import type { AnyModel } from "@anywidget/types";
   import { Confetti } from "svelte-confetti";
   import { slide } from "svelte/transition";
-  import Icon from "@iconify/svelte";
+  import ChevronLeft from "@iconify-svelte/ci/chevron-left";
+  import ChevronRight from "@iconify-svelte/ci/chevron-right";
   /*
   Used icon packs: (attribution, as per their licenses)
   - coolicons by Kryston Schwarze, CC BY 4.0
@@ -27,7 +28,12 @@
     bindings?: Bindings;
   };
 
-  let { model, bindings }: Props = $props();
+  // let { model, bindings }: Props = $props();
+  let model = undefined;
+  let bindings: Bindings = $state({
+    image: "",
+    tags: {foo: true, bar: false},
+  })
   let { image = "", tags = {} } = $derived(bindings!!);
 
   function toggleTag(tagName: string) {
@@ -89,27 +95,29 @@
     </div>
   {/if}
 
-  <div class="mt-6 flex flex-row items-center gap-4">
+  <div class="mt-6 mx-2 flex flex-row items-center gap-4">
     <button 
       class="flex flex-row p-2 pl-3 pr-4 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
       onclick={() => goToImage(cur_image_idx - 1)}
       disabled={cur_image_idx == 0}
     >
-      <Icon icon="ci:chevron-left" class="align-middle" />
+      <ChevronLeft width="1em" height="1em" class="align-middle" />
       Previous
     </button>
 
-    <div class="flex-1 h-full relative">
-      <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          class="h-full bg-blue-500 transition-[width] duration-300"
-          style:--progress={percentage}
-          style:width="calc(var(--progress) * 100%)"
-          style:anchor-name="--progressbar"
-        ></div>
+    <div class="flex-1 relative">
+      <div class="py-[1.5em]">
+        <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            class="h-full bg-blue-500 transition-[width] duration-300"
+            style:--progress={percentage}
+            style:width="calc(var(--progress) * 100%)"
+            style:anchor-name="--progressbar"
+          ></div>
+        </div>
       </div>
       <span
-        class="absolute text-black"
+        class="absolute block text-black"
         style:position-anchor="--progressbar"
         style:position-area="bottom span-left"
       >
@@ -123,7 +131,7 @@
       disabled={cur_image_idx == total_images}
     >
       Next
-      <Icon icon="ci:chevron-right" class="align-middle" />
+      <ChevronRight width="1em" height="1em" class="align-middle" />
     </button>
   </div>
 
