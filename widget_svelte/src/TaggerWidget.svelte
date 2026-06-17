@@ -10,17 +10,35 @@
     https://icon-sets.iconify.design/ci/
   */
 
+  interface TagGroupInfo {
+    tags: {
+      tag: string;
+      path: string[];
+      present: boolean;
+    }[];
+    subgroups: TagGroupInfo[];
+    hotkey: string | null;
+  }
+
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
   // - Hotkeys
-  // - Separate input and output bindings
   // - Show when an image was already handled (a checkmark?)
   // - Maybe let the user resize the widget? Would be nice.
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   // - Break up into subcomponents!
   interface Bindings {
+    // Input only
     image: string;
-    tags: Record<string, boolean>;  // TODO: Actually nested
+    tags: TagGroupInfo[];
+    image_idx: number;
+    image_count: number;
+    // Output only
+    toggle_tag: {
+      path: string[];
+      present: boolean;
+    };
+    switch_image: number;
   }
 
   interface Props {
@@ -28,28 +46,33 @@
     bindings?: Bindings;
   };
 
-  // let { model, bindings }: Props = $props();
-  let model = undefined;
-  let bindings: Bindings = $state({
-    image: "",
-    tags: {foo: true, bar: false},
-  })
-  let { image = "", tags = {} } = $derived(bindings!!);
+  let { model, bindings }: Props = $props();
 
-  function toggleTag(tagName: string) {
-    if (bindings) {
-      bindings.tags = { ...tags, [tagName]: !tags[tagName] };
-    }
+  let image = $derived(bindings?.image || "");
+  let tags = $derived(bindings?.tags || []);
+  let curImageIdx = $derived(bindings?.image_idx || 0);
+  let totalImages = $derived(bindings?.image_count || 0);
+
+  let percentage = $derived(totalImages == 0 ? 1 : curImageIdx / totalImages);
+  let is_done = $derived(curImageIdx == totalImages);
+
+  function toggleTag(event: {
+    path: string[],
+    present: boolean,
+  }) {
+    // TODO: Add a spinner while waiting for updates from python somehow?
+    if (!bindings) return;
+
+    bindings.toggle_tag = event;
   }
 
-  let cur_image_idx = $state(0);
-  // TODO: desired_image_idx
-  let total_images = $state(10);
-  let percentage = $derived(cur_image_idx / total_images);
-  let is_done = $derived(cur_image_idx == total_images)
-
   function goToImage(idx: number) {
-    cur_image_idx = Math.max(0, Math.min(idx, total_images));
+    // TODO: Add a spinner while waiting for updates from python somehow?
+    if (!bindings) return;
+
+    idx = Math.max(0, Math.min(idx, totalImages));
+
+    bindings.switch_image = idx;
   }
 
   let width: number | undefined = $state()
@@ -62,7 +85,7 @@
 >
   {#if is_done}
     <div class="grid place-items-center h-16 border p-4 rounded-lg bg-green-200 shadow-sm">
-      {#if total_images > 0}
+      {#if totalImages > 0}
         <Confetti x={[-width / 400.0, width / 400.0]} y={[-0.5, 0.25]} amount={100} />
       {/if}
       <span class="text-green-800 font-bold absolute">Done!</span>
@@ -78,7 +101,7 @@
       </div>
       
       <div class="flex-1 flex flex-row flex-wrap gap-2 py-1">
-        {#each Object.keys(tags) as tagName}
+        <!-- {#each Object.keys(tags) as tagName}
           <button
             class={[
               "px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 h-min",
@@ -90,7 +113,7 @@
           >
             {tagName}
           </button>
-        {/each}
+        {/each} -->
       </div>
     </div>
   {/if}
@@ -98,8 +121,8 @@
   <div class="mt-6 mx-2 flex flex-row items-center gap-4">
     <button 
       class="flex flex-row p-2 pl-3 pr-4 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
-      onclick={() => goToImage(cur_image_idx - 1)}
-      disabled={cur_image_idx == 0}
+      onclick={() => goToImage(curImageIdx - 1)}
+      disabled={curImageIdx == 0}
     >
       <ChevronLeft width="1em" height="1em" class="align-middle" />
       Previous
@@ -121,14 +144,14 @@
         style:position-anchor="--progressbar"
         style:position-area="bottom span-left"
       >
-        {cur_image_idx}/{total_images}
+        {curImageIdx}/{totalImages}
       </span>
     </div>
 
     <button 
       class="flex flex-row p-2 pl-4 pr-3 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
-      onclick={() => goToImage(cur_image_idx + 1)}
-      disabled={cur_image_idx == total_images}
+      onclick={() => goToImage(curImageIdx + 1)}
+      disabled={curImageIdx == totalImages}
     >
       Next
       <ChevronRight width="1em" height="1em" class="align-middle" />
