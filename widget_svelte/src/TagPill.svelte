@@ -10,7 +10,7 @@
 
 <button
   class={[
-    "px-4 py-2 h-min rounded-full text-sm font-medium tag-btn",
+    "px-4 py-2 h-min rounded-full text-sm font-medium tag-btn text-center",
     tag.present ? "tag-btn--on" : "tag-btn--off",
   ]}
   // onclick={() => toggleTag(tag.path)}
