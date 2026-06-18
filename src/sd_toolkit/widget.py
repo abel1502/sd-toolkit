@@ -37,6 +37,10 @@ class ToggleGroupMessage:
     idx: int
     present: bool
 
+@define
+class SwitchImageMessage:
+    idx: int
+
 
 attrs.resolve_types(TagGroupInfo)
 attrs.resolve_types(TagInfo)
@@ -66,15 +70,19 @@ class TaggerWidget(anywidget.AnyWidget):
     image_count: int = traitlets.Int().tag(sync=True)
     
     # Output traitlets
-    toggle_tag: ToggleTagMessage = traitlets.Any().tag(
+    # TODO: BUG: Repeating the same request has no effect because the traitlet isn't updated.
+    toggle_tag: ToggleTagMessage = traitlets.Any(None).tag(
         sync=True,
         **_use_cattrs(ToggleTagMessage),
     )
-    toggle_group: ToggleGroupMessage = traitlets.Any().tag(
+    toggle_group: ToggleGroupMessage = traitlets.Any(None).tag(
         sync=True,
         **_use_cattrs(ToggleGroupMessage),
     )
-    switch_image: int = traitlets.Int().tag(sync=True)
+    switch_image: SwitchImageMessage = traitlets.Any(None).tag(
+        sync=True,
+        **_use_cattrs(SwitchImageMessage),
+    )
     
     def __init__(
         self,
@@ -94,6 +102,9 @@ class TaggerWidget(anywidget.AnyWidget):
         assert change["type"] == "change"
         assert change["owner"] == self
         
+        if change["new"] is None:
+            return
+        
         match change["name"]:
             case "toggle_tag":
                 self._do_toggle_tag(change["new"])
@@ -103,37 +114,40 @@ class TaggerWidget(anywidget.AnyWidget):
                 self._do_switch_image(change["new"])
             case _:
                 assert False
+        
+        # Mark event as handled
+        setattr(self, change["name"], None)
     
-    def _do_toggle_tag(self, tag_toggle: ToggleTagMessage) -> None:
-        logger.debug(f"Toggle tag {tag_toggle}")
+    def _do_toggle_tag(self, event: ToggleTagMessage) -> None:
+        logger.debug(f"Toggle tag {event}")
         
         # TODO: Edit source of truth, then regenerate!
         groups = copy.deepcopy(self.tags)
         for group in groups:
             for tag in group.tags:
-                if tag.path == tag_toggle.path:
-                    tag.present = tag_toggle.present
+                if tag.path == event.path:
+                    tag.present = event.present
         self.tags = groups
     
-    def _do_toggle_group(self, group_toggle: ToggleGroupMessage) -> None:
-        logger.debug(f"Toggle group {group_toggle}")
+    def _do_toggle_group(self, event: ToggleGroupMessage) -> None:
+        logger.debug(f"Toggle group {event}")
         
         # TODO: Edit source of truth, then regenerate!
         groups = copy.deepcopy(self.tags)
-        for tag in groups[group_toggle.idx].tags:
-            tag.present = group_toggle.present
+        for tag in groups[event.idx].tags:
+            tag.present = event.present
         self.tags = groups
     
-    def _do_switch_image(self, image_idx: int) -> None:
-        logger.debug(f"Switch to image {image_idx}")
+    def _do_switch_image(self, event: SwitchImageMessage) -> None:
+        logger.debug(f"Switch image {event}")
         
-        if image_idx in range(self.image_count):
+        if event.idx in range(self.image_count):
             pass  # TODO
         else:
             # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
             image = ""
         
-        self.image_idx = image_idx
+        self.image_idx = event.idx
     
     # TODO: Read the image file, transform it into a preview (or don't?) and send it to the widget. Maybe also preload images in the background. Definitely LRU-cache them!
     # TODO: Load saved choices when loading an image. Save them whenever the user switches to a new image. Identity can be the path. Skip done images (can filter the input in the constructor), unless the user passes a redo flag or something.

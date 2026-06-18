@@ -30,9 +30,9 @@
     image_count: number;
 
     // Output only
-    toggle_tag: ToggleTagEvent;
-    toggle_group: ToggleGroupEvent;
-    switch_image: SwitchImageEvent;
+    toggle_tag: ToggleTagEvent | null;
+    toggle_group: ToggleGroupEvent | null;
+    switch_image: SwitchImageEvent | null;
   }
 
   interface Props {
