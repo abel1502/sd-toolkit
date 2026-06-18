@@ -10,7 +10,7 @@
     https://icon-sets.iconify.design/ci/
   */
 
-  import type { TagGroupInfo, TagInfo } from "./types";
+  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent } from "./types";
   import TagsPanel from "./TagsPanel.svelte";
 
   // TODO: Match the python side.
@@ -30,11 +30,9 @@
     image_count: number;
 
     // Output only
-    toggle_tag: {
-      path: string[];
-      present: boolean;
-    };
-    switch_image: number;
+    toggle_tag: ToggleTagEvent;
+    toggle_group: ToggleGroupEvent;
+    switch_image: SwitchImageEvent;
   }
 
   interface Props {
@@ -52,17 +50,21 @@
   let percentage = $derived(totalImages == 0 ? 1 : curImageIdx / totalImages);
   let is_done = $derived(curImageIdx == totalImages);
 
-  function toggleTag(event: {
-    path: string[],
-    present: boolean,
-  }) {
+  function toggleTag(event: ToggleTagEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
     if (!bindings) return;
 
     bindings.toggle_tag = event;
   }
 
-  function goToImage(idx: number) {
+  function toggleGroup(event: ToggleGroupEvent) {
+    // TODO: Add a spinner while waiting for updates from python somehow?
+    if (!bindings) return;
+
+    bindings.toggle_group = event;
+  }
+
+  function goToImage(idx: SwitchImageEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
     if (!bindings) return;
 
@@ -97,7 +99,7 @@
       </div>
       
       <div class="flex-1 py-1">
-        <TagsPanel tagGroups={tags} />
+        <TagsPanel tagGroups={tags} {toggleGroup} {toggleTag} />
       </div>
     </div>
   {/if}

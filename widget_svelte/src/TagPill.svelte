@@ -1,12 +1,13 @@
 <script lang="ts">
-  import type { TagInfo } from "./types";
+  import type { TagInfo, ToggleTagEvent } from "./types";
 
   interface Props {
     tag: TagInfo;
     class?: string;
+    toggleTag: (event: ToggleTagEvent) => void;
   };
 
-  let { tag, class: extraClass = "" }: Props = $props();
+  let { tag, class: extraClass = "", toggleTag }: Props = $props();
 </script>
 
 <button
@@ -15,7 +16,10 @@
     tag.present ? "tag-btn--on" : "tag-btn--off",
     extraClass,
   ]}
-  // onclick={() => toggleTag(tag.path)}
+  onclick={() => toggleTag({
+    path: tag.path,
+    present: !tag.present
+  })}
 >
   {tag.tag}
 </button>

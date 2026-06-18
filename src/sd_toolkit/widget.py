@@ -1,5 +1,6 @@
 import typing
 import pathlib
+import copy
 
 import anywidget
 import traitlets
@@ -15,7 +16,7 @@ STATIC: typing.Final[pathlib.Path] = pathlib.Path(__file__).parent / "static"
 @define
 class TagGroupInfo:
     tags: list[TagInfo]
-    subgroups: list[TagGroupInfo] = field(factory=list)
+    level: int = 0
     hotkey: str | None = None
 
 
@@ -29,6 +30,11 @@ class TagInfo:
 @define
 class ToggleTagMessage:
     path: tuple[str, ...]
+    present: bool
+
+@define
+class ToggleGroupMessage:
+    idx: int
     present: bool
 
 
@@ -64,6 +70,10 @@ class TaggerWidget(anywidget.AnyWidget):
         sync=True,
         **_use_cattrs(ToggleTagMessage),
     )
+    toggle_group: ToggleGroupMessage = traitlets.Any().tag(
+        sync=True,
+        **_use_cattrs(ToggleGroupMessage),
+    )
     switch_image: int = traitlets.Int().tag(sync=True)
     
     def __init__(
@@ -78,7 +88,7 @@ class TaggerWidget(anywidget.AnyWidget):
         # TODO: Pass initial values to the super constructor
         super().__init__()
         
-        self.observe(out_capture(self._on_change), names=["toggle_tag", "switch_image"])
+        self.observe(out_capture(self._on_change), names=["toggle_tag", "toggle_group", "switch_image"])
     
     def _on_change(self, change: typing.Mapping[str, typing.Any]) -> None:
         assert change["type"] == "change"
@@ -87,6 +97,8 @@ class TaggerWidget(anywidget.AnyWidget):
         match change["name"]:
             case "toggle_tag":
                 self._do_toggle_tag(change["new"])
+            case "toggle_group":
+                self._do_toggle_group(change["new"])
             case "switch_image":
                 self._do_switch_image(change["new"])
             case _:
@@ -94,6 +106,23 @@ class TaggerWidget(anywidget.AnyWidget):
     
     def _do_toggle_tag(self, tag_toggle: ToggleTagMessage) -> None:
         logger.debug(f"Toggle tag {tag_toggle}")
+        
+        # TODO: Edit source of truth, then regenerate!
+        groups = copy.deepcopy(self.tags)
+        for group in groups:
+            for tag in group.tags:
+                if tag.path == tag_toggle.path:
+                    tag.present = tag_toggle.present
+        self.tags = groups
+    
+    def _do_toggle_group(self, group_toggle: ToggleGroupMessage) -> None:
+        logger.debug(f"Toggle group {group_toggle}")
+        
+        # TODO: Edit source of truth, then regenerate!
+        groups = copy.deepcopy(self.tags)
+        for tag in groups[group_toggle.idx].tags:
+            tag.present = group_toggle.present
+        self.tags = groups
     
     def _do_switch_image(self, image_idx: int) -> None:
         logger.debug(f"Switch to image {image_idx}")
