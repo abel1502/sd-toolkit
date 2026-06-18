@@ -11,7 +11,7 @@
   */
 
   import type { TagGroupInfo, TagInfo } from "./types";
-  import TagGroups from "./TagGroups.svelte";
+  import TagsPanel from "./TagsPanel.svelte";
 
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
@@ -80,7 +80,7 @@
   bind:clientWidth={width}
 >
   {#if is_done}
-    <div class="grid place-items-center h-16 border p-4 rounded-lg bg-green-200 shadow-sm">
+    <div class="grid place-items-center h-16 border border-green-300 p-4 rounded-lg bg-green-200 shadow-sm">
       {#if totalImages > 0}
         <Confetti x={[-width / 400.0, width / 400.0]} y={[-0.5, 0.25]} amount={100} />
       {/if}
@@ -88,7 +88,7 @@
     </div>
   {:else}
     <div class="flex flex-row gap-6 resize-y min-h-48 h-64 max-h-[50vw] overflow-hidden" transition:slide>
-      <div class="grid place-items-center h-full min-h-full aspect-square bg-gray-100 rounded-lg border overflow-hidden">
+      <div class="grid place-items-center h-full min-h-full aspect-square bg-gray-100 rounded-lg border border-gray-300 overflow-hidden">
         {#if image}
           <img src={image} alt="Preview" class="w-full h-full object-contain"/>
         {:else}
@@ -97,14 +97,14 @@
       </div>
       
       <div class="flex-1 py-1">
-        <TagGroups tags={tags} />
+        <TagsPanel tagGroups={tags} />
       </div>
     </div>
   {/if}
 
   <div class="mt-6 mx-2 w-full flex flex-row items-center gap-4">
     <button 
-      class="flex flex-row p-2 pl-3 pr-4 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
+      class="nav-button pl-3 pr-4"
       onclick={() => goToImage(curImageIdx - 1)}
       disabled={curImageIdx == 0}
     >
@@ -133,7 +133,7 @@
     </div>
 
     <button 
-      class="flex flex-row p-2 pl-4 pr-3 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300"
+      class="nav-button pl-4 pr-3"
       onclick={() => goToImage(curImageIdx + 1)}
       disabled={curImageIdx == totalImages}
     >
@@ -143,3 +143,11 @@
   </div>
 
 </div>
+
+<style lang="postcss">
+  @reference "./app.css";
+  
+  .nav-button {
+    @apply flex flex-row p-2 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300;
+  }
+</style>
