@@ -64,13 +64,13 @@
     bindings.toggle_group = event;
   }
 
-  function goToImage(idx: SwitchImageEvent) {
+  function goToImage(event: SwitchImageEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
     if (!bindings) return;
 
-    idx = Math.max(0, Math.min(idx, totalImages));
+    event.idx = Math.max(0, Math.min(event.idx, totalImages));
 
-    bindings.switch_image = idx;
+    bindings.switch_image = event;
   }
 
   let width: number | undefined = $state()
@@ -107,7 +107,7 @@
   <div class="mt-6 mx-2 w-full flex flex-row items-center gap-4">
     <button 
       class="nav-button pl-3 pr-4"
-      onclick={() => goToImage(curImageIdx - 1)}
+      onclick={() => goToImage({idx: curImageIdx - 1})}
       disabled={curImageIdx == 0}
     >
       <ChevronLeft width="1em" height="1em" class="align-middle" />
@@ -136,7 +136,7 @@
 
     <button 
       class="nav-button pl-4 pr-3"
-      onclick={() => goToImage(curImageIdx + 1)}
+      onclick={() => goToImage({idx: curImageIdx + 1})}
       disabled={curImageIdx == totalImages}
     >
       Next
