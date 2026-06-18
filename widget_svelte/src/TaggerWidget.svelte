@@ -15,7 +15,7 @@
 
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
-  // - Hotkeys. A switch in the corner to listen for them.
+  // - Hotkeys. A switch in the corner to listen for them. Actually make that a bottom row with the switch and a description of the hotkeys.
   // - Show when an image was already handled (a checkmark?)
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   // - Break up into subcomponents!
@@ -87,12 +87,12 @@
       <span class="text-green-800 font-bold absolute">Done!</span>
     </div>
   {:else}
-    <div class="flex flex-row gap-6 resize-y min-h-32 max-h-[50vw] overflow-hidden" transition:slide>
-      <div class="flex aspect-square h-full bg-gray-100 rounded-lg items-center justify-center border overflow-hidden">
+    <div class="flex flex-row gap-6 resize-y min-h-48 h-64 max-h-[50vw] overflow-hidden" transition:slide>
+      <div class="grid place-items-center h-full min-h-full aspect-square bg-gray-100 rounded-lg border overflow-hidden">
         {#if image}
           <img src={image} alt="Preview" class="w-full h-full object-contain"/>
         {:else}
-          <span class="text-gray-400 text-sm">No Image</span>
+          <span class="text-gray-400 text-sm text-center">No Image</span>
         {/if}
       </div>
       
