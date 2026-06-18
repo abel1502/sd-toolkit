@@ -3,7 +3,6 @@
 
   import type { TagGroupInfo, ToggleGroupEvent, ToggleTagEvent } from "./types";
   import TagGroup from "./TagGroup.svelte";
-  import TagPill from "./TagPill.svelte";
 
   interface Props {
     tagGroups: TagGroupInfo[];
@@ -16,7 +15,7 @@
 
 
 <div class="flex flex-col gap-2">
-  {#each tagGroups as tagGroup, idx}
+  {#each tagGroups as tagGroup, idx (idx)}
     <TagGroup {idx} {tagGroup} {toggleGroup} {toggleTag} />
   {/each}
 </div>

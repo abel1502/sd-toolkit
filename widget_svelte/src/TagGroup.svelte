@@ -2,7 +2,6 @@
   import MoreGridSmall from "@iconify-svelte/ci/more-grid-small";
 
   import type { TagGroupInfo, ToggleGroupEvent, ToggleTagEvent } from "./types";
-  import TagsPanel from "./TagsPanel.svelte";
   import TagPill from "./TagPill.svelte";
 
   interface Props {
@@ -41,7 +40,7 @@
     {/if}
   </button>
   
-  {#each tagGroup.tags as tag}
+  {#each tagGroup.tags as tag (tag.path)}
     <TagPill tag={tag} {toggleTag} />
   {/each}
 </div>

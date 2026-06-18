@@ -19,9 +19,8 @@
   // - Show when an image was already handled (a checkmark?)
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
   // - Break up into subcomponents!
-  // - Maybe let the user resize the widget and parts of it? Would be nice.
-  //   - Use paneforge or something. Two panes horizontally, all in a vertical pane. Scroll or auto-zoom on vertical overflow
-  // - Bigger group toggle button; group identifiers to communicate the group toggle event. Possibly let the first tag act as the group representative?
+  // - Undo, or at least discarding the changes for the current image.
+  // - Clicking on the progressbar to seek? Coloring progressbar 
   interface Bindings {
     // Input only
     image: string;
