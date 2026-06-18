@@ -5,6 +5,7 @@
   import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent } from "./types";
   import TagsPanel from "./TagsPanel.svelte";
   import NavBar from "./NavBar.svelte";
+  import HotkeyBar from "./HotkeyBar.svelte";
 
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
@@ -97,4 +98,6 @@
   {/if}
 
   <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} />
+
+  <HotkeyBar class="mt-4" />
 </div>
