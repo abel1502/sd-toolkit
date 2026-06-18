@@ -21,7 +21,7 @@
 <div
   class="flex flex-row flex-wrap items-center gap-2 p-2 border border-gray-300 bg-gray-50 rounded-lg"
   style:--level={tagGroup.level}
-  style:margin-left="calc(var(--spacing) * var(--level))"
+  style:margin-left="calc(var(--spacing) * var(--level) * 8)"
 >
   <button
     class={[
