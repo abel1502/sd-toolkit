@@ -76,7 +76,7 @@
 
 
 <div
-  class="flex flex-col w-full min-w-2xl p-4 border rounded-lg bg-white shadow-sm"
+  class="flex flex-col w-full resize-x min-w-2xl max-w-full p-4 border rounded-lg bg-white shadow-sm overflow-hidden"
   bind:clientWidth={width}
 >
   {#if is_done}
