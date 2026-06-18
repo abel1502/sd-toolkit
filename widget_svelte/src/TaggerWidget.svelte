@@ -4,7 +4,7 @@
   import { slide } from "svelte/transition";
   import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent } from "./types";
   import TagsPanel from "./TagsPanel.svelte";
-  import NavBar from "./NabBar.svelte";
+  import NavBar from "./NavBar.svelte";
 
   // TODO: Match the python side.
   // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
@@ -96,5 +96,5 @@
     </div>
   {/if}
 
-  <NavBar class="mt-6 mx-2" {curImageIdx} {totalImages} {goToImage} />
+  <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} />
 </div>
