@@ -267,6 +267,7 @@ class Tags:
         
         return self
     
+    # TODO: Here and elsewhere, maybe add some handling for subtags simultaneously with the owner tag?
     def remove(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
         tags = Tags.cast(tags)
         
@@ -398,6 +399,7 @@ class Tags:
         
         return self
     
+    # TODO: Some special handling for tag occurences in paths?
     def filter_str(self, func: typing.Callable[[str], bool]) -> typing.Self:
         return self.filter(lambda tag: func(tag.tag))
     
@@ -412,7 +414,9 @@ class Tags:
         
         return self
     
-    def map_str(self, func: typing.Callable[[str], str]) -> typing.Self:
+    def map_str(self, func: typing.Callable[[str], str], *, affect_path: bool = False) -> typing.Self:
+        if affect_path:
+            return self.map(lambda tag: tag.moved(tuple(func(part) for part in tag.path)))
         return self.map(lambda tag: tag.renamed(func(tag.tag)))
     
     def flatmap(self, func: typing.Callable[[Tag], TagsLike]) -> typing.Self:
@@ -469,14 +473,13 @@ class Tags:
             self.filter_str(lambda x: not self._BAD_TAGS_RE.fullmatch(x))
         
         if remove_underscores:
-            # TODO: Dedicated renaming functionality that handles occurences in paths automatically
-            self.map_str(lambda x: x.replace("_", " "))
+            self.map_str(lambda x: x.replace("_", " "), affect_path=True)
         
         if normalize_space:
-            self.map_str(lambda x, regex=self._MULTI_SPACE_RE: regex.sub(" ", x))
+            self.map_str(lambda x, regex=self._MULTI_SPACE_RE: regex.sub(" ", x), affect_path=True)
         
         if escape_weighted_captions:
-            self.map_str(lambda x, trtab=self._ESCAPE_TRANSLATION_TABLE: x.encode("unicode_escape").decode().translate(trtab))
+            self.map_str(lambda x, trtab=self._ESCAPE_TRANSLATION_TABLE: x.encode("unicode_escape").decode().translate(trtab), affect_path=True)
         
         return self
     
