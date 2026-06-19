@@ -18,9 +18,9 @@
 
   function handleGroupToggle(event: ShortcutEventDetail) {
     console.log("Group toggle");
-    let hotkey = event.trigger.code!.at(-1)!;
+    let hotkey = event.trigger.code!.at(-1)!.toLowerCase();
 
-    let idx = tagGroups.findIndex(g => g.hotkey === hotkey);
+    let idx = tagGroups.findIndex(g => g.hotkey?.toLowerCase() === hotkey);
 
     if (idx >= 0) {
       let group = tagGroups[idx];
