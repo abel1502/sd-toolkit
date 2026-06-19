@@ -2,6 +2,7 @@
   import MoreGridSmall from "@iconify-svelte/ci/more-grid-small";
 
   import type { TagGroupInfo, ToggleGroupEvent, ToggleTagEvent } from "./types";
+  import { isGroupPresent } from "./utils";
   import TagPill from "./TagPill.svelte";
 
   interface Props {
@@ -13,7 +14,7 @@
 
   let { idx, tagGroup, toggleGroup, toggleTag }: Props = $props();
 
-  let groupPresent = $derived(tagGroup.tags.map(t => t.present).reduce((a, b) => a && b, true));
+  let groupPresent = $derived(isGroupPresent(tagGroup));
 </script>
 
 
@@ -24,7 +25,7 @@
 >
   <button
     class={[
-      "text-sm h-6 w-6 rounded-sm tag-btn",
+      "text-sm h-6 w-6 rounded-sm tag-btn ",
       groupPresent ? "tag-btn--on" : "tag-btn--off",
     ]}
     aria-label="Toggle group"
@@ -34,7 +35,7 @@
     })}
   >
     {#if tagGroup.hotkey}
-      <span class="m-auto text-center font-medium">{tagGroup.hotkey}</span>
+      <span class="m-auto text-center font-semibold text-slate-600">{tagGroup.hotkey}</span>
     {:else}
       <MoreGridSmall width="1em" height="1em" class="m-auto align-middle" />
     {/if}

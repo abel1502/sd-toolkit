@@ -1,31 +1,96 @@
 <script lang="ts">
   import { shortcut, type ShortcutEventDetail, type ShortcutModifierDefinition } from './shortcut';
 
+  import type { TagGroupInfo, ToggleGroupEvent } from "./types";
+  import { isGroupPresent } from "./utils";
+
   interface Props {
+    tagGroups: TagGroupInfo[];
+    toggleGroup: (event: ToggleGroupEvent) => void;
+    nextImage: () => void;
+    prevImage: () => void;
     class?: string;
   };
 
-  let { class: extraClass = "" }: Props = $props();
+  let { tagGroups, toggleGroup, nextImage, prevImage, class: extraClass = "" }: Props = $props();
 
   let hotkeysEnabled = $state(false);
 
-  function handleNumber(event: ShortcutEventDetail) {
-    // TODO
+  function handleGroupToggle(event: ShortcutEventDetail) {
+    console.log("Group toggle");
+    let hotkey = event.trigger.code!.at(-1)!;
+
+    let idx = tagGroups.findIndex(g => g.hotkey === hotkey);
+
+    if (idx >= 0) {
+      let group = tagGroups[idx];
+
+      let present: boolean;
+      if (event.originalEvent.shiftKey) {
+        present = true;
+      } else if (event.originalEvent.ctrlKey) {
+        present = false;
+      } else {
+        present = !isGroupPresent(group);
+      }
+
+      console.log(`Toggling group ${idx} to ${present}`);
+      toggleGroup({ idx, present });
+      event.originalEvent.preventDefault();
+    }
+
+    console.log("Group toggle done");
   }
 
-  // TODO: remove `hotkey` from group and identify it with the index (same as how groups are communicated anyway) (remember to offset by 1, and have no hotkey for >9).
+  function handleNextImage(event: ShortcutEventDetail) {
+    nextImage();
+    event.originalEvent.preventDefault();
+  }
+
+  function handlePrevImage(event: ShortcutEventDetail) {
+    prevImage();
+    event.originalEvent.preventDefault();
+  }
+
+  function handleUndo(event: ShortcutEventDetail) {
+    // TODO
+    console.log("Not implemented: undo");
+  }
 </script>
 
 <svelte:window
   use:shortcut={{
     trigger: [
-      ...Array.from({ length: 9 }, (_, i) => ({
-        code: `Digit${i + 1}`,
+      ...Array.from({ length: 10 }, (_, i) => ({
+        code: `Digit${i}`,  // Digit0 ... Digit9
         modifier: ['none', 'shift', 'ctrl'] as ShortcutModifierDefinition,
-        callback: handleNumber,
+        callback: handleGroupToggle,
         enabled: hotkeysEnabled,
       })),
-      // TODO: Handle other shortcuts
+      ...Array.from({ length: 26 }, (_, i) => ({
+        code: `Key${String.fromCharCode(65 + i)}`,  // KeyA ... KeyZ
+        modifier: ['none', 'shift', 'ctrl'] as ShortcutModifierDefinition,
+        callback: handleGroupToggle,
+        enabled: hotkeysEnabled,
+      })),
+      {
+        code: 'Space',
+        modifier: 'none',
+        callback: handleNextImage,
+        enabled: hotkeysEnabled,
+      },
+      {
+        code: 'Space',
+        modifier: 'shift',
+        callback: handlePrevImage,
+        enabled: hotkeysEnabled,
+      },
+      {
+        code: 'Backspace',
+        modifier: 'none',
+        callback: handleUndo,
+        enabled: hotkeysEnabled,
+      },
     ]
   }}
 />
@@ -34,14 +99,17 @@
   "w-full flex flex-row gap-2 justify-center text-sm text-slate-600",
   extraClass,
 ]}>
-  <!-- TODO: Make the descriptions scrollable on smaller screens -->
-  <span>Keyboad shortcuts:</span>
-  <span><kbd>1</kbd>&dash;<kbd>9</kbd> &ndash; toggle group;</span>
-  <span><kbd>Shift</kbd>+... &ndash; enable;</span>
-  <span><kbd>Ctrl</kbd>+... &ndash; disable;</span>
-  <span><kbd>Space</kbd> &ndash; next image;</span>
-  <span><kbd>Shift</kbd>+... &ndash; previous;</span>
-  <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> &ndash; undo changes to image.</span>
+  <div class="min-w-48 flex-1 py-1 overflow-x-auto scrollbar-hidden">
+    <div class="flex w-max gap-2 whitespace-nowrap">
+      <span>Keyboard shortcuts:</span>
+      <span>group hotkey &ndash; toggle group;</span>
+      <span><kbd>Shift</kbd>+... &ndash; enable group;</span>
+      <span><kbd>Ctrl</kbd>+... &ndash; disable group;</span>
+      <span><kbd>Space</kbd> &ndash; next image;</span>
+      <span><kbd>Shift</kbd>+<kbd>Space</kbd> &ndash; previous image;</span>
+      <span><kbd>Backspace</kbd> &ndash; undo changes to current image.</span>
+    </div>
+  </div>
 
   <label class="ml-auto toggle">
     <span class="mr-3">Keyboard shortcuts</span>
@@ -54,7 +122,7 @@
   @reference "./app.css";
 
   kbd {
-    @apply align-baseline p-1 text-xs font-semibold text-gray-600 border-gray-400 bg-gray-200 border rounded-lg;
+    @apply align-baseline p-1 text-xs font-semibold text-slate-600 border-gray-400 bg-gray-200 border rounded-lg;
   }
 
   .toggle {

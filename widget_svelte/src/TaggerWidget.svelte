@@ -18,7 +18,7 @@
   interface Bindings {
     // Input only
     image: string;
-    tags: TagGroupInfo[];
+    tag_groups: TagGroupInfo[];
     image_idx: number;
     image_count: number;
 
@@ -36,11 +36,10 @@
   let { model, bindings }: Partial<Props> = $props();
 
   let image = $derived(bindings?.image || "");
-  let tags = $derived(bindings?.tags || []);
+  let tagGroups = $derived(bindings?.tag_groups || []);
   let curImageIdx = $derived(bindings?.image_idx || 0);
   let totalImages = $derived(bindings?.image_count || 0);
 
-  let percentage = $derived(totalImages == 0 ? 1 : curImageIdx / totalImages);
   let is_done = $derived(curImageIdx == totalImages);
 
   function toggleTag(event: ToggleTagEvent) {
@@ -64,6 +63,14 @@
     event.idx = Math.max(0, Math.min(event.idx, totalImages));
 
     bindings.switch_image = event;
+  }
+
+  function nextImage() {
+    goToImage({ idx: curImageIdx + 1 });
+  }
+
+  function prevImage() {
+    goToImage({ idx: curImageIdx - 1 });
   }
 
   let width: number | undefined = $state()
@@ -92,12 +99,12 @@
       </div>
       
       <div class="flex-1 py-1">
-        <TagsPanel tagGroups={tags} {toggleGroup} {toggleTag} />
+        <TagsPanel {tagGroups} {toggleGroup} {toggleTag} />
       </div>
     </div>
   {/if}
 
-  <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} />
+  <NavBar class="mt-6" {curImageIdx} {totalImages} {nextImage} {prevImage} />
 
-  <HotkeyBar class="mt-4" />
+  <HotkeyBar class="mt-4" {tagGroups} {toggleGroup} {nextImage} {prevImage} />
 </div>

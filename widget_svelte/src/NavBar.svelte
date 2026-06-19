@@ -6,11 +6,12 @@
   interface Props {
     curImageIdx: number;
     totalImages: number;
-    goToImage: (event: SwitchImageEvent) => void;
+    nextImage: () => void;
+    prevImage: () => void;
     class?: string;
   };
 
-  let { curImageIdx, totalImages, goToImage, class: extraClass = "" }: Props = $props();
+  let { curImageIdx, totalImages, nextImage, prevImage, class: extraClass = "" }: Props = $props();
 
   let percentage = $derived(totalImages == 0 ? 1 : curImageIdx / totalImages);
 </script>
@@ -21,7 +22,7 @@
 ]}>
   <button 
     class="nav-button pl-3 pr-4"
-    onclick={() => goToImage({idx: curImageIdx - 1})}
+    onclick={prevImage}
     disabled={curImageIdx == 0}
   >
     <ChevronLeft width="1em" height="1em" class="align-middle" />
@@ -50,7 +51,7 @@
 
   <button 
     class="nav-button pl-4 pr-3"
-    onclick={() => goToImage({idx: curImageIdx + 1})}
+    onclick={nextImage}
     disabled={curImageIdx == totalImages}
   >
     Next

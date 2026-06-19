@@ -62,7 +62,7 @@ class TaggerWidget(anywidget.AnyWidget):
     
     # Input traitlets
     image: str = traitlets.Unicode().tag(sync=True)
-    tags: typing.Sequence[TagGroupInfo] = traitlets.List().tag(
+    tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List().tag(
         sync=True,
         **_use_cattrs(typing.Sequence[TagGroupInfo]),
     )
@@ -122,21 +122,21 @@ class TaggerWidget(anywidget.AnyWidget):
         logger.debug(f"Toggle tag {event}")
         
         # TODO: Edit source of truth, then regenerate!
-        groups = copy.deepcopy(self.tags)
+        groups = copy.deepcopy(self.tag_groups)
         for group in groups:
             for tag in group.tags:
                 if tag.path == event.path:
                     tag.present = event.present
-        self.tags = groups
+        self.tag_groups = groups
     
     def _do_toggle_group(self, event: ToggleGroupMessage) -> None:
         logger.debug(f"Toggle group {event}")
         
         # TODO: Edit source of truth, then regenerate!
-        groups = copy.deepcopy(self.tags)
+        groups = copy.deepcopy(self.tag_groups)
         for tag in groups[event.idx].tags:
             tag.present = event.present
-        self.tags = groups
+        self.tag_groups = groups
     
     def _do_switch_image(self, event: SwitchImageMessage) -> None:
         logger.debug(f"Switch image {event}")
