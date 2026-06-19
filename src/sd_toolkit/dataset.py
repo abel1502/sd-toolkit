@@ -105,7 +105,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             if tags_file is None:
                 logger.info(f"Image {img_file} has no tags")
             
-            tags: Tags = Tags.parse(tags_file.read_text(), separator=tag_separator) if tags_file else Tags()
+            tags: Tags = Tags.parse(tags_file.read_text(), separator=tag_separator) if tags_file else Tags([])
             
             logger.debug(f"Loading image {img_file} with tags {tags!r}")
             
@@ -313,12 +313,12 @@ attrs.resolve_types(Dataset)
 
 CBOR_CONVERTER: typing.Final[cattrs_cbor2.Cbor2Converter] = cattrs_cbor2.make_converter()
 
-@CBOR_CONVERTER.register_unstructure_hook(Tags)
+@CBOR_CONVERTER.register_unstructure_hook
 def _unstructure_Tags(data: Tags, cls: typing.Type[Tags]) -> list[typing.Any]:
     unstructure_tag = CBOR_CONVERTER.get_unstructure_hook(Tag)
     return [unstructure_tag(tag, Tag) for tag in data]
 
-@CBOR_CONVERTER.register_structure_hook(Tags)
+@CBOR_CONVERTER.register_structure_hook
 def _structure_Tags(data: list[typing.Any], cls: typing.Type[Tags]) -> Tags:
     structure_tag = CBOR_CONVERTER.get_structure_hook(Tag)
     return Tags([structure_tag(tag, Tag) for tag in data])

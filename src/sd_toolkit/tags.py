@@ -59,7 +59,7 @@ class Tag:
             
             raise TypeError(msg)
         
-        return cls(*tag)
+        return cls(tag)
     
     @functools.cached_property
     def tag(self) -> str:
@@ -85,6 +85,16 @@ class Tag:
 
     def __str__(self) -> str:
         return self.tag
+    
+    def is_child_of(self, tag: TagLike) -> bool:
+        tag = Tag.cast(tag)
+        
+        return self.path[:len(tag.path)] == tag.path
+    
+    def is_parent_of(self, tag: TagLike) -> bool:
+        tag = Tag.cast(tag)
+        
+        return tag.is_child_of(self)
     
     def moved(self, path: tuple[str, ...], *, parent_only: bool = False) -> Tag:
         if parent_only:
@@ -165,7 +175,7 @@ class Tags:
         return copy.deepcopy(self)
     
     def to_str(self, *, trailing_comma: bool = True) -> str:
-        return ', '.join(self) + (',' if trailing_comma and self else '')
+        return ', '.join(map(str, self)) + (',' if trailing_comma and self else '')
     
     def __str__(self) -> str:
         return self.to_str()
@@ -195,7 +205,10 @@ class Tags:
             match = "tag" if len(tag.path) == 1 else "path"
         
         if match == "path":
-            return [self._tags.by.path[tag.path]]
+            found = self._tags.by.path.get(tag.path, None)
+            if found is None:
+                return []
+            return [found]
         
         assert match == "tag"
         return list(self._tags.by.tag[tag.tag])
@@ -344,9 +357,9 @@ class Tags:
             to_path = to_path + (from_.tag,)
         
         def _move(tag: Tag) -> Tag:
-            if tag.path[:len(from_path)] != from_path:
-                return tag
-            return tag.moved(to_path + tag.path[len(from_path):])
+            if tag.is_child_of(from_path):
+                return tag.moved(to_path + tag.path[len(from_path):])
+            return tag
         
         return self.map(_move)
     
@@ -356,7 +369,7 @@ class Tags:
     ) -> typing.Self:
         to_path = Tag.cast(to).path
         
-        return self.map(lambda tag: tag.moved(to_path, parent_only=True))
+        return self.map(lambda tag: tag if tag.is_child_of(to_path) else tag.moved(to_path + tag.path))
     
     def rename(
         self,

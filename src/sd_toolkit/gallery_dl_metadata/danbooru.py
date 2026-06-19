@@ -34,7 +34,7 @@ class DanbooruPost(BaseModel):
     created_at: datetime
     uploader_id: int
     score: int
-    source: HttpUrl | None = None
+    source: str
     md5: str
     last_comment_bumped_at: datetime | None = None
     rating: str

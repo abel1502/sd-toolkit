@@ -12,6 +12,7 @@ from attrs import define, field
 import cattrs
 from loguru import logger
 from data_url import construct_data_url
+import cachetools
 
 from sd_toolkit.tags import Tag, TagLike, Tags, TagsLike
 from sd_toolkit.dataset import TaggedImage
@@ -76,6 +77,7 @@ class TagGroup:
         
         if scope is not None:
             scope = Tag.cast(scope)
+            tags.move_all(scope)
         
         self.__attrs_init__(
             tags=tags,
@@ -87,6 +89,10 @@ class TagGroup:
         for subgroup in subgroups:
             if not isinstance(subgroup, TagGroup):
                 subgroup = TagGroup(subgroup)
+            
+            if subgroup._scope is None and self._scope is not None:
+                subgroup._tags.move_all(self._scope)
+                subgroup._scope = self._scope
             
             self._subgroups.append(subgroup)
         
@@ -263,12 +269,12 @@ class TaggerWidget(anywidget.AnyWidget):
             logger.warning(f"Cannot load {image.path}: {mime_type!r} is not a know image mime type. Supplying a blank image.")
             image_url = ""
         else:
-            # TODO: LRU-cache images
             # TODO: Maybe also preload images in the background.
-            image_bytes = image.path.read_bytes()
+            image_bytes = self._read_image(image.path)
             
             image_url = construct_data_url(
                 mime_type=mime_type,
+                base64_encoded=False,
                 data=image_bytes,
             )
         
@@ -278,8 +284,15 @@ class TaggerWidget(anywidget.AnyWidget):
                 tag.present = image.tags.has(tag.path, match="path")
         
         self.image_idx = idx
-        self.image_url = image_url
+        self.image = image_url
         self.tag_groups = tag_groups
+    
+    @cachetools.cached(
+        cache=cachetools.LRUCache(maxsize=5),
+        key=lambda _, path: path,
+    )
+    def _read_image(self, path: pathlib.Path) -> bytes:
+        return path.read_bytes()
     
     # TODO: Load saved choices when loading an image. Save them whenever the user switches to a new image. Identity can be the path. Skip done images (can filter the input in the constructor), unless the user passes a redo flag or something.
 
