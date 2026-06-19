@@ -7,14 +7,11 @@
   import NavBar from "./NavBar.svelte";
   import HotkeyBar from "./HotkeyBar.svelte";
 
-  // TODO: Match the python side.
-  // - Nested tag groups. Note: groups must have a button for toggling the whole thing at once.
-  // - Hotkeys. A switch in the corner to listen for them. Actually make that a bottom row with the switch and a description of the hotkeys.
+  // TODO:
   // - Show when an image was already handled (a checkmark?)
   // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
-  // - Break up into subcomponents!
   // - Undo, or at least discarding the changes for the current image.
-  // - Clicking on the progressbar to seek? Coloring progressbar 
+  // - Clicking on the progressbar to seek? Coloring progressbar based on which images are already handled?
   interface Bindings {
     // Input only
     image: string;
