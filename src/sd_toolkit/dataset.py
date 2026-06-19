@@ -24,7 +24,7 @@ class TaggedImage:
 
 
 @define()
-class Dataset:
+class Dataset(typing.Sequence[TaggedImage]):
     root: pathlib.Path
     contents: list[TaggedImage]
     checkpoints_history: list[pathlib.Path] = field(factory=list)
@@ -286,6 +286,23 @@ class Dataset:
             setattr(self, field.name, getattr(restored, field.name))
     
     # TODO: diff method for seeing the changes between two datasets. I guess will need a diff between Tags first.
+    
+    @typing.overload
+    def __getitem__(self, index: int) -> TaggedImage:
+        ...
+    
+    @typing.overload
+    def __getitem__(self, index: slice[int | None, int | None, int | None]) -> typing.Sequence[TaggedImage]:
+        ...
+    
+    def __getitem__(self, index: int | slice[int | None, int | None, int | None]):
+        return self.contents[index]
+    
+    def __iter__(self) -> typing.Iterator[TaggedImage]:
+        return iter(self.contents)
+    
+    def __len__(self) -> int:
+        return len(self.contents)
 
     # TODO: Tags accessor
 
