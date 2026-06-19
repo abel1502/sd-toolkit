@@ -353,6 +353,14 @@ class Tags:
         
         return self.map(_move)
     
+    def move_all(
+        self,
+        to: TagLike,
+    ) -> typing.Self:
+        to_path = Tag.cast(to).path
+        
+        return self.map(lambda tag: tag.moved(to_path, parent_only=True))
+    
     def rename(
         self,
         from_: TagLike,
