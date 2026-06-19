@@ -12,7 +12,7 @@ import cbor2
 from cattrs.preconf import cbor2 as cattrs_cbor2
 from pydantic import BaseModel
 
-from sd_toolkit.tags import Tags
+from sd_toolkit.tags import Tags, Tag
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 
 
@@ -27,6 +27,7 @@ class TaggedImage:
 class Dataset:
     root: pathlib.Path
     contents: list[TaggedImage]
+    checkpoints_history: list[pathlib.Path] = field(factory=list)
     
     _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
     
@@ -225,10 +226,6 @@ class Dataset:
     def clone(self) -> Dataset:
         return copy.deepcopy(self)
     
-    _CBOR_CONVERTER: typing.ClassVar[typing.Final[cattrs_cbor2.Cbor2Converter]] = cattrs_cbor2.make_converter()
-    # _CBOR_CONVERTER.register_structure_hook(Tags, lambda data, cls: )
-    # _CBOR_CONVERTER.register_unstructure_hook(Tags, lambda data, cls: )
-    
     def save_checkpoint(self, path: pathlib.Path | str, overwrite: bool = False) -> None:
         if isinstance(path, str):
             path = pathlib.Path(path)
@@ -241,7 +238,7 @@ class Dataset:
             logger.warning(f"Overwriting {path}")
         
         with ZstdFile(path, "wb") as f:
-            cbor2.dump(self._CBOR_CONVERTER.unstructure(self), f)
+            cbor2.dump(CBOR_CONVERTER.unstructure(self), f)
     
     @classmethod
     def load_checkpoint(cls, path: pathlib.Path | str) -> Dataset:
@@ -249,17 +246,65 @@ class Dataset:
             path = pathlib.Path(path)
         
         with ZstdFile(path, "rb") as f:
-            result = cls._CBOR_CONVERTER.structure(cbor2.load(f), Dataset)
+            result = CBOR_CONVERTER.structure(cbor2.load(f), Dataset)
         
         logger.info(f"Loaded dataset checkpoint from {path}")
         
         return result
+    
+    def checkpoint(
+        self,
+        path: pathlib.Path | str,
+    ) -> None:
+        """
+        Either saves a new checkpoint or reloads an old one. After each invocation of `checkpoint`
+        with the same `path`, the contents of the dataset will be the same.
+        
+        It is recommended to start any cell intended to change the dataset with a call to `checkpoint` to
+        ensure no progress is lost.
+        
+        .. Note::
+            Checkpoints include all metadata, but DO NOT include the contents of the images. This allows
+            checkpoints to remain very lightweight, but it means you must exercise caution when applying
+            potentially destructive operations to the dataset. `sd_toolkit` does not include any such
+            functionality.
+        
+        :param path: Path to the checkpoint. If you're struggling with the extension, `.bin` is a good choice.
+        """
+        
+        if isinstance(path, str):
+            path = pathlib.Path(path)
+        
+        if path not in self.checkpoints_history:
+            self.checkpoints_history.append(path)
+            self.save_checkpoint(path, overwrite=True)
+            return
+        
+        restored = self.load_checkpoint(path)
+        for field in attrs.fields(self):
+            field: attrs.Attribute
+            setattr(self, field.name, getattr(restored, field.name))
+    
+    # TODO: diff method for seeing the changes between two datasets. I guess will need a diff between Tags first.
 
     # TODO: Tags accessor
 
 
 attrs.resolve_types(TaggedImage)
 attrs.resolve_types(Dataset)
+
+
+CBOR_CONVERTER: typing.Final[cattrs_cbor2.Cbor2Converter] = cattrs_cbor2.make_converter()
+
+@CBOR_CONVERTER.register_unstructure_hook(Tags)
+def _unstructure_Tags(data: Tags, cls: typing.Type[Tags]) -> list[typing.Any]:
+    unstructure_tag = CBOR_CONVERTER.get_unstructure_hook(Tag)
+    return [unstructure_tag(tag, Tag) for tag in data]
+
+@CBOR_CONVERTER.register_structure_hook(Tags)
+def _structure_Tags(data: list[typing.Any], cls: typing.Type[Tags]) -> Tags:
+    structure_tag = CBOR_CONVERTER.get_structure_hook(Tag)
+    return Tags([structure_tag(tag, Tag) for tag in data])
 
 
 # TODO: Dataset view/subset?
