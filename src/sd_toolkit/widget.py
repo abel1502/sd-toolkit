@@ -1,6 +1,9 @@
 import typing
 import pathlib
 import copy
+import re
+import itertools
+import mimetypes
 
 import anywidget
 import traitlets
@@ -8,6 +11,10 @@ import attrs
 from attrs import define, field
 import cattrs
 from loguru import logger
+from data_url import construct_data_url
+
+from sd_toolkit.tags import Tag, TagLike, Tags, TagsLike
+from sd_toolkit.dataset import TaggedImage
 
 
 STATIC: typing.Final[pathlib.Path] = pathlib.Path(__file__).parent / "static"
@@ -46,6 +53,51 @@ attrs.resolve_types(TagGroupInfo)
 attrs.resolve_types(TagInfo)
 
 
+@define(init=False)
+class TagGroup:
+    _tags: Tags
+    _hotkey: str | None
+    _scope: Tag | None
+    _subgroups: list[TagGroup] = field(factory=list)
+    
+    def __init__(
+        self,
+        tags: TagsLike,
+        *,
+        hotkey: str | None = None,
+        scope: TagLike | None = None,
+    ):
+        tags = Tags.cast(tags)
+        
+        if hotkey is not None:
+            if not re.fullmatch(r"[a-zA-Z0-9]", hotkey):
+                raise ValueError("Hotkey must be a single number or letter key")
+            hotkey = hotkey.upper()
+        
+        if scope is not None:
+            scope = Tag.cast(scope)
+        
+        self.__attrs_init__(
+            tags=tags,
+            hotkey=hotkey,
+            scope=scope,
+        )
+    
+    def subgroups(self, *subgroups: TagGroup | TagsLike) -> typing.Self:
+        for subgroup in subgroups:
+            if not isinstance(subgroup, TagGroup):
+                subgroup = TagGroup(subgroup)
+            
+            self._subgroups.append(subgroup)
+        
+        return self
+    
+    def flatten(self, level: int = 0) -> typing.Generator[tuple[int, TagGroup], None, None]:
+        yield level, self
+        for subgroup in self._subgroups:
+            yield from subgroup.flatten(level + 1)
+
+
 def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
     return dict(
         to_json=lambda obj, manager: cattrs.unstructure(obj),
@@ -61,16 +113,15 @@ class TaggerWidget(anywidget.AnyWidget):
     _css = STATIC / "styles.css"
     
     # Input traitlets
-    image: str = traitlets.Unicode().tag(sync=True)
-    tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List().tag(
+    image: str = traitlets.Unicode("").tag(sync=True)
+    tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List([]).tag(
         sync=True,
         **_use_cattrs(typing.Sequence[TagGroupInfo]),
     )
-    image_idx: int = traitlets.Int().tag(sync=True)
-    image_count: int = traitlets.Int().tag(sync=True)
+    image_idx: int = traitlets.Int(0).tag(sync=True)
+    image_count: int = traitlets.Int(0).tag(sync=True)
     
     # Output traitlets
-    # TODO: BUG: Repeating the same request has no effect because the traitlet isn't updated.
     toggle_tag: ToggleTagMessage = traitlets.Any(None).tag(
         sync=True,
         **_use_cattrs(ToggleTagMessage),
@@ -84,17 +135,71 @@ class TaggerWidget(anywidget.AnyWidget):
         **_use_cattrs(SwitchImageMessage),
     )
     
+    _dataset: typing.Sequence[TaggedImage]
+    
     def __init__(
         self,
-        # TODO: Does the user define the tag groups as `TagGroupInfo`s? Ideally not (present is unnecessary).
-        # TODO: Tag groups; hotkey toggle; dataset/iterable of images; configuration for saving choices (image identity -> decisions for it)
+        dataset: typing.Sequence[TaggedImage],  # TODO: Only allow Dataset specifically?
+        groups: typing.Sequence[TagGroup],
+        *,
+        # TODO: configuration for saving choices (image identity -> decisions for it)
+        auto_hotkeys: typing.Literal["top_level", "all"] | None = None,
         out_capture: typing.Callable[[_Callback], _Callback] = lambda f: f,
     ):
         """
         .. note:: If you have an `out = ipywidgets.Output()`, specify `out_capture=out.capture()`.
         """
-        # TODO: Pass initial values to the super constructor
-        super().__init__()
+        
+        self._dataset = dataset
+        
+        infer_hotkey: typing.Callable[[int], str | None]
+        hotkey_counter = 0
+        
+        if auto_hotkeys == "top_level":
+            def infer_hotkey(level: int) -> str | None:
+                nonlocal hotkey_counter
+                if level > 0:
+                    return None
+                if hotkey_counter < 9:
+                    hotkey_counter += 1
+                    return str(hotkey_counter)
+                return None
+        elif auto_hotkeys == "all":
+            def infer_hotkey(level: int) -> str | None:
+                nonlocal hotkey_counter
+                if hotkey_counter < 9:
+                    hotkey_counter += 1
+                    return str(hotkey_counter)
+                return None
+        else:
+            def infer_hotkey(level: int) -> str | None:
+                return None
+        
+        tag_groups = [
+            TagGroupInfo(
+                tags=[
+                    TagInfo(
+                        tag=tag.tag,
+                        path=tag.path,
+                        present=False,
+                    )
+                    for tag in group_def._tags
+                ],
+                level=level,
+                hotkey=group_def._hotkey or infer_hotkey(level),
+            )
+            for level, group_def in itertools.chain.from_iterable(
+                group.flatten()
+                for group in groups
+            )
+        ]
+        
+        super().__init__(
+            tag_groups=tag_groups,
+            image_count=len(dataset),
+        )
+        
+        self.load_image(0)
         
         self.observe(out_capture(self._on_change), names=["toggle_tag", "toggle_group", "switch_image"])
     
@@ -142,14 +247,40 @@ class TaggerWidget(anywidget.AnyWidget):
         logger.debug(f"Switch image {event}")
         
         if event.idx in range(self.image_count):
-            pass  # TODO
+            self.load_image(event.idx)
         else:
             # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
-            image = ""
-        
-        self.image_idx = event.idx
+            self.image = ""
+            self.image_idx = event.idx
     
-    # TODO: Read the image file, transform it into a preview (or don't?) and send it to the widget. Maybe also preload images in the background. Definitely LRU-cache them!
+    def load_image(self, idx: int) -> None:
+        image = self._dataset[idx]
+        
+        mime_type = mimetypes.guess_file_type(image.path)[0]
+        
+        image_url: str
+        if mime_type is None or not mime_type.startswith("image/"):
+            logger.warning(f"Cannot load {image.path}: {mime_type!r} is not a know image mime type. Supplying a blank image.")
+            image_url = ""
+        else:
+            # TODO: LRU-cache images
+            # TODO: Maybe also preload images in the background.
+            image_bytes = image.path.read_bytes()
+            
+            image_url = construct_data_url(
+                mime_type=mime_type,
+                data=image_bytes,
+            )
+        
+        tag_groups = copy.deepcopy(self.tag_groups)
+        for group in tag_groups:
+            for tag in group.tags:
+                tag.present = image.tags.has(tag.path, match="path")
+        
+        self.image_idx = idx
+        self.image_url = image_url
+        self.tag_groups = tag_groups
+    
     # TODO: Load saved choices when loading an image. Save them whenever the user switches to a new image. Identity can be the path. Skip done images (can filter the input in the constructor), unless the user passes a redo flag or something.
 
 
