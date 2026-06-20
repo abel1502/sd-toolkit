@@ -2,6 +2,7 @@ import typing
 import re
 import copy
 import functools
+import enum
 
 import attrs
 from attrs import define, field
@@ -10,7 +11,7 @@ import typing_extensions
 from frozendict import frozendict
 from nanotable import Table, SortedUniqueIndex, SortedMultiIndex, ConflictError
 import parsy
-import enum
+from loguru import logger
 
 
 type TagLike = Tag | str | tuple[str, ...]
@@ -132,7 +133,7 @@ class Tag:
         return attrs.evolve(self, metadata={k: self.metadata[k] for k in keys})
 
 
-type TagsLike = Tags | str | typing.Iterable[str] | typing.Iterable[Tag]
+type TagsLike = Tags | HierarchicalTagsDict | str | typing.Iterable[TagLike]
 
 
 class _Indexes(typing.Protocol):
@@ -152,7 +153,7 @@ class Tags:
         validator=instance_of(Table),
     )
     
-    def __init__(self, tags: typing.Iterable[Tag | tuple[str, ...] | str]):
+    def __init__(self, tags: typing.Iterable[TagLike] = ()):
         self.__attrs_init__()
         
         if isinstance(tags, str):
@@ -166,24 +167,70 @@ class Tags:
         if isinstance(tags, cls):
             return tags
         if isinstance(tags, str):
-            return cls.parse(tags)
+            # TODO: Try parsing hierarchical first, fall back to plain on error?
+            return cls.parse_plain(tags)
+        if isinstance(tags, dict):
+            return cls.from_hierarchical_dict(tags)
         return cls(tags)
     
     @classmethod
-    def parse(cls, text: str, separator: str = ",") -> Tags:
+    def parse_plain(cls, text: str, separator: str = ",") -> Tags:
         return cls(filter(None, map(str.strip, text.split(separator))))
     
-    def clone(self) -> Tags:
-        return copy.deepcopy(self)
-    
-    def to_str(self, *, trailing_comma: bool = True) -> str:
+    def to_plain(self, *, trailing_comma: bool = True) -> str:
         return ', '.join(map(str, self)) + (',' if trailing_comma and self else '')
     
+    @classmethod
+    def from_hierarchical_dict(cls, tags: HierarchicalTagsDict) -> Tags:
+        raise NotImplementedError
+    
+    @classmethod
+    def parse_hierarchical(cls, text: str) -> Tags:
+        return _HIERARCHICAL_TAGS_PARSER.parse(text)
+    
+    def to_hierarchical_dict(
+        self,
+        *,
+        orphans: typing.Literal["allow", "warn", "raise"] = "warn",
+    ) -> HierarchicalTagsDict:
+        for tag in list(self):
+            if self.has(tag.path[:-1], match="path"):
+                continue
+            if orphans == "raise":
+                raise ValueError(f"Tag {tag!r} is orphaned in {self!r} ({tag.path[:-1]} is missing)")
+            if orphans == "warn":
+                logger.warning(
+                    f"Tag {tag!r} is orphaned in {self!r}. Adding {tag.path[:-1]} to compensate. "
+                    f"If you'd like to disable this warning, use orphans=\"allow\" or orphans=\"raise\"."
+                )
+        
+        result: HierarchicalTagsDict = {}
+        
+        for tag in self:
+            current = result
+            for path in tag.path:
+                current = current.setdefault(path, {})
+        
+        return result
+    
+    def to_hierarchical_str(
+        self,
+        *,
+        indent: int | None = None,
+        trailing_comma: bool = True,
+        orphans: typing.Literal["allow", "warn", "raise"] = "warn",
+    ) -> str:
+        return format_hierarchical_dict(
+            self.to_hierarchical_dict(orphans=orphans),
+            indent=indent,
+            trailing_comma=trailing_comma,
+        )
+    
     def __str__(self) -> str:
-        return self.to_str()
+        return self.to_plain()
     
     def __repr__(self) -> str:
-        return f"<Tags {self.to_str(trailing_comma=False)!r}>"
+        return f"<Tags {self.to_plain(trailing_comma=False)!r}>"
     
     def __rich_repr__(self) -> typing.Generator[typing.Any | tuple[str, typing.Any] | tuple[str, typing.Any, typing.Any], None, None]:
         yield from self
@@ -196,6 +243,9 @@ class Tags:
     
     def __iter__(self) -> typing.Iterator[Tag]:
         return iter(self._tags)
+    
+    def clone(self) -> Tags:
+        return Tags(self)
     
     def pipe[T](self, func: typing.Callable[[Tags], T]) -> T:
         return func(self)
@@ -368,10 +418,12 @@ class Tags:
     def move_all(
         self,
         to: TagLike,
+        *,
+        force: bool = False,
     ) -> typing.Self:
         to_path = Tag.cast(to).path
         
-        return self.map(lambda tag: tag if tag.is_child_of(to_path) else tag.moved(to_path + tag.path))
+        return self.map(lambda tag: tag if not force and tag.is_child_of(to_path) else tag.moved(to_path + tag.path))
     
     def rename(
         self,
@@ -505,30 +557,122 @@ attrs.resolve_types(Tag)
 attrs.resolve_types(Tags)
 
 
+type HierarchicalTagsDict = dict[str, HierarchicalTagsDict]
+
+
+def format_hierarchical_dict(
+    tags_dict: HierarchicalTagsDict,
+    *,
+    indent: int | None = None,
+    trailing_comma: bool = True,
+) -> str:
+    single_line = indent is None
+    
+    def quote_key(s: str) -> str:
+        if _PLAIN_TAG_WORD_RE.fullmatch(s):
+            return s
+        
+        return s.translate(str.maketrans({
+            "\\": "\\\\",
+            "\"": '\\"',
+        }))
+    
+    def flatten_chain(
+        key: str,
+        value: HierarchicalTagsDict,
+    ) -> tuple[str, HierarchicalTagsDict]:
+        parts = [key]
+        
+        while isinstance(value, dict) and len(value) == 1:
+            (next_key, next_value), = value.items()
+            parts.append(next_key)
+            value = next_value
+        
+        key = "::".join(quote_key(part) for part in parts)
+        
+        return key, value
+    
+    def render_block(tags_dict: HierarchicalTagsDict, level: int) -> str:
+        if not tags_dict:
+            return ""
+        
+        rendered_items: list[str] = []
+        
+        for key, value in tags_dict.items():
+            text, rest = flatten_chain(key, value)
+            
+            if rest:
+                text += " " + render_block(rest, level + 1)
+            
+            rendered_items.append(text)
+        
+        if single_line:
+            body = ", ".join(rendered_items)
+            
+            if level == 0 and trailing_comma and rendered_items:
+                body += ","
+            
+            if level > 0 and body:
+                body = f"{{{body}}}"
+            
+            return body
+        
+        pad = " " * (indent * level)
+        child_pad = " " * (indent * (level + 1))
+        
+        lines = []
+        lines.append("{")
+        last_index = len(rendered_items) - 1
+        for i, text in enumerate(rendered_items):
+            comma = "," if (i < last_index or trailing_comma) else ""
+            lines.append(child_pad + text + comma)
+        lines.append(pad + "}")
+        
+        return "\n".join(lines)
+    
+    return render_block(tags_dict, 0)
+
+
+# Note: deliberately doesn't include some characters found in danbooru tags.
+# A complete regex would've been r"[\w\-()\[\].:;<>\^\'\"+?!/\\|~&=@#%$\s]+".
+# Also doesn't include spaces -- the parser handles them separately,
+# while the formatter should prefer quoting tags with spaces.
+_PLAIN_TAG_WORD_RE: typing.Final[re.Pattern] = re.compile(r"[\w\-()\[\].\'+?!/\\~&%]+")
+
+
+# TODO: Return a HierarchicalTagsDict instead of Tags?
 def _define_parser() -> parsy.Parser[str, Tags]:
-    from parsy import Parser, generate, eof, regex, alt, seq, whitespace, string, fail
+    from parsy import Parser, generate, eof, regex, alt, whitespace, string, fail, match_item, test_item
     
     class Token(enum.IntEnum):
+        comma = enum.auto()
         lbrace = enum.auto()
         rbrace = enum.auto()
         scope = enum.auto()
     
+    # Lexer
+    
     opt_space = regex(r"\s*")
     
-    # Note: deliberately doesn't include some characters found in danbooru tags.
-    # A complete regex would've been r"[\w\-()\[\].:;<>\^\'\"+?!/\\|~&=@#%$\s]+".
-    plain_tag_word = regex(r"[\w\-()\[\].\'+?!/\\~&%]+")
-    plain_tag = seq(
-        plain_tag_word,
-        (whitespace >> plain_tag_word).many(),
-    ).map(" ".join).desc("simple tag")
+    plain_tag_word = regex(_PLAIN_TAG_WORD_RE)
+    
+    plain_tag = (
+        plain_tag_word
+        .sep_by(whitespace, min=1)
+        .map(" ".join)
+        .desc("simple tag")
+    )
     
     quoted_tag = (
         string('"').desc("opening quote") >>
         alt(
-            regex(r"[^\"\\]+"),
+            regex(r"[^\"\\\x00-\x1f\x7f-\x9f]+"),
+            regex(r"\t").result(" "),
             regex(r"\\([\"\\])", group=1).desc("escape sequence"),
             regex(r"\\.") >> fail("invalid escape sequence"),
+            regex(r"\\") >> eof >> fail("incomplete escape sequence"),
+            regex(r"\x00-\x1f\x7f-\x9f") >> fail("forbidden control characters"),
+            eof >> fail("unclosed quoted tag"),
         ).many()
         << string('"').desc("closing quote")
     ).map("".join).desc("quoted tag")
@@ -536,14 +680,46 @@ def _define_parser() -> parsy.Parser[str, Tags]:
     lexer: Parser[str, list[Token | str]] = alt(
         opt_space >> plain_tag,
         opt_space >> quoted_tag,
-        (opt_space >> string(":")).result(Token.scope),
+        (opt_space >> string(",")).result(Token.comma),
+        (opt_space >> string("::")).result(Token.scope),
         (opt_space >> string("{")).result(Token.lbrace),
         (opt_space >> string("}")).result(Token.rbrace),
     ).desc("token").many() << opt_space << eof
     
-    # TODO: Parser
+    # Parser
     
-    raise NotImplementedError
+    single_tag: Parser[list[Token | str], Tag] = (
+        test_item(lambda x: isinstance(x, str), "tag literal")
+        .sep_by(match_item(Token.scope), min=1)
+        .map(lambda x: Tag(tuple(x)))
+    )
+    
+    @generate
+    def tag_with_children() -> typing.Generator[Parser[list[Token | str], typing.Any], typing.Any, Tags]:
+        tag: Tag = yield single_tag
+        children: Tags = yield (
+            match_item(Token.lbrace)
+            .then(parser)
+            .skip(match_item(Token.rbrace))
+            .optional([])
+        )
+        return children.move_all(tag, force=True).add(tag)
+    
+    @generate("hierarchical tags")
+    def parser() -> typing.Generator[Parser[list[Token | str], typing.Any], typing.Any, Tags]:
+        result: Tags | None = (yield tag_with_children.optional())
+        if result is None:
+            return Tags()
+        for more in (yield match_item(Token.comma).then(tag_with_children).many()):
+            more: list[Tags]
+            result.add(more, match="path")
+        yield match_item(Token.comma).optional()
+        return result
+    
+    return lexer.bind(parser)
+
+
+_HIERARCHICAL_TAGS_PARSER: typing.Final[parsy.Parser[str, Tags]] = _define_parser()
 
 
 __all__ = [

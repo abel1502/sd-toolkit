@@ -105,7 +105,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             if tags_file is None:
                 logger.info(f"Image {img_file} has no tags")
             
-            tags: Tags = Tags.parse(tags_file.read_text(), separator=tag_separator) if tags_file else Tags([])
+            tags: Tags = Tags.parse_plain(tags_file.read_text(), separator=tag_separator) if tags_file else Tags()
             
             logger.debug(f"Loading image {img_file} with tags {tags!r}")
             
@@ -204,7 +204,7 @@ class Dataset(typing.Sequence[TaggedImage]):
                 shutil.copyfile(img.path, dest_img_path)
             
             logger.debug(f"Writing image tags ({len(img.tags)}) to {dest_tags_path}")
-            dest_tags_path.write_text(f"{img.tags.to_str()}\n")
+            dest_tags_path.write_text(f"{img.tags.to_plain()}\n")
         
         if then_zip:
             dest_zip = dest.with_name(dest.name + ".zip")
