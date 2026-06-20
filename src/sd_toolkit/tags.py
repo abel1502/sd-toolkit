@@ -9,6 +9,8 @@ from attrs.validators import instance_of, min_len
 import typing_extensions
 from frozendict import frozendict
 from nanotable import Table, SortedUniqueIndex, SortedMultiIndex, ConflictError
+import parsy
+import enum
 
 
 type TagLike = Tag | str | tuple[str, ...]
@@ -501,6 +503,47 @@ class Tags:
 
 attrs.resolve_types(Tag)
 attrs.resolve_types(Tags)
+
+
+def _define_parser() -> parsy.Parser[str, Tags]:
+    from parsy import Parser, generate, eof, regex, alt, seq, whitespace, string, fail
+    
+    class Token(enum.IntEnum):
+        lbrace = enum.auto()
+        rbrace = enum.auto()
+        scope = enum.auto()
+    
+    opt_space = regex(r"\s*")
+    
+    # Note: deliberately doesn't include some characters found in danbooru tags.
+    # A complete regex would've been r"[\w\-()\[\].:;<>\^\'\"+?!/\\|~&=@#%$\s]+".
+    plain_tag_word = regex(r"[\w\-()\[\].\'+?!/\\~&%]+")
+    plain_tag = seq(
+        plain_tag_word,
+        (whitespace >> plain_tag_word).many(),
+    ).map(" ".join).desc("simple tag")
+    
+    quoted_tag = (
+        string('"').desc("opening quote") >>
+        alt(
+            regex(r"[^\"\\]+"),
+            regex(r"\\([\"\\])", group=1).desc("escape sequence"),
+            regex(r"\\.") >> fail("invalid escape sequence"),
+        ).many()
+        << string('"').desc("closing quote")
+    ).map("".join).desc("quoted tag")
+    
+    lexer: Parser[str, list[Token | str]] = alt(
+        opt_space >> plain_tag,
+        opt_space >> quoted_tag,
+        (opt_space >> string(":")).result(Token.scope),
+        (opt_space >> string("{")).result(Token.lbrace),
+        (opt_space >> string("}")).result(Token.rbrace),
+    ).desc("token").many() << opt_space << eof
+    
+    # TODO: Parser
+    
+    raise NotImplementedError
 
 
 __all__ = [
