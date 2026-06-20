@@ -133,7 +133,7 @@ class Tag:
         return attrs.evolve(self, metadata={k: self.metadata[k] for k in keys})
 
 
-type TagsLike = Tags | HierarchicalTagsDict | str | typing.Iterable[TagLike]
+type TagsLike = Tags | HierarchicalTagsDict | str | Tag | typing.Iterable[TagLike]
 
 
 class _Indexes(typing.Protocol):
@@ -171,6 +171,14 @@ class Tags:
             return cls.parse_plain(tags)
         if isinstance(tags, dict):
             return cls.from_hierarchical_dict(tags)
+        if isinstance(tags, Tag):
+            return cls([tags])
+        if isinstance(tags, tuple):
+            raise TypeError(
+                "Casting a tuple to Tags is ambiguous: it could mean a path for a single tag, or multiple different tags. "
+                "If you meant the former, consider either wrapping the tuple in a list, or invoking the Tag constructor directly. "
+                "If you meant the latter, consider casting the tuple to a different iterable, for example list."
+            )
         return cls(tags)
     
     @classmethod
@@ -186,7 +194,68 @@ class Tags:
     
     @classmethod
     def parse_hierarchical(cls, text: str) -> Tags:
-        return _HIERARCHICAL_TAGS_PARSER.parse(text)
+        try:
+            return _HIERARCHICAL_TAGS_PARSER.parse(text)
+        except parsy.ParseError as e:
+            expected: list[s] = e.expected
+            stream: str | list[_Token | str] = e.stream
+            index: int = e.index
+            
+            message: str
+            
+            if isinstance(stream, str):
+                # Lexing error
+                symbol: str
+                if index in range(len(stream)):
+                    symbol = f"symbol {stream[index]!r}"
+                else:
+                    symbol = "end of string"
+                
+                def repr_expectation(x: str) -> str:
+                    if re.fullmatch(r"[\w\s]+", x):
+                        return x
+                    return repr(x)
+                
+                expectations = ", ".join(f"{repr_expectation(x)}" for x in expected)
+                if len(expected) > 1:
+                    expectations = f"one of: {expectations}"
+                    
+                # Temporary workaround until my suggestion to parsy is implemented
+                if "quoted tag" in expected and symbol == f"symbol {'"'!r}":
+                    expectations = "valid quoted tag. Make sure that your quoted tag starts and ends with double quotes, has valid backslash escaping for '\\\\' and '\\\"', doesn't have any other escape sequences, ends within the same line and doesn't contain unicode control characters"
+                
+                message = f"Unexpected {symbol} at position {index}. Expected {expectations}."
+            else:
+                def repr_item(item: _Token | str) -> str:
+                    if isinstance(item, str):
+                        return f"tag literal {item!r}"
+                    
+                    return {
+                        _Token.comma: "comma",
+                        _Token.lbrace: "left brace",
+                        _Token.rbrace: "right brace",
+                        _Token.scope: "namespace separator",
+                    }.get(item, repr(item))
+                
+                token: str
+                if index in range(len(stream)):
+                    token = repr_item(stream[index])
+                else:
+                    token = "end of string"
+                
+                expectations = ", ".join(f"{x}" for x in expected)
+                if len(expected) > 1:
+                    expectations = f"one of: {expectations}"
+                
+                position: str
+                if index == 0:
+                    position = "at the beginning of the string"
+                else:
+                    position = f"(token number {index}) after {repr_item(stream[index - 1])}"
+                
+                message = f"Unexpected {token} {position}. Expected {expectations}."
+            
+            raise ValueError(f"Failed to parse tags: {message}") from None
     
     def to_hierarchical_dict(
         self,
@@ -194,7 +263,7 @@ class Tags:
         orphans: typing.Literal["allow", "warn", "raise"] = "warn",
     ) -> HierarchicalTagsDict:
         for tag in list(self):
-            if self.has(tag.path[:-1], match="path"):
+            if len(tag.path) == 1 or self.has(tag.path[:-1], match="path"):
                 continue
             if orphans == "raise":
                 raise ValueError(f"Tag {tag!r} is orphaned in {self!r} ({tag.path[:-1]} is missing)")
@@ -613,20 +682,22 @@ def format_hierarchical_dict(
                 body += ","
             
             if level > 0 and body:
-                body = f"{{{body}}}"
+                body = f"{{ {body} }}"
             
             return body
         
-        pad = " " * (indent * level)
-        child_pad = " " * (indent * (level + 1))
+        pad = " " * (indent * (level - 1))
+        child_pad = " " * (indent * level)
         
         lines = []
-        lines.append("{")
+        if level > 0:
+            lines.append("{")
         last_index = len(rendered_items) - 1
         for i, text in enumerate(rendered_items):
             comma = "," if (i < last_index or trailing_comma) else ""
             lines.append(child_pad + text + comma)
-        lines.append(pad + "}")
+        if level > 0:
+            lines.append(pad + "}")
         
         return "\n".join(lines)
     
@@ -640,31 +711,32 @@ def format_hierarchical_dict(
 _PLAIN_TAG_WORD_RE: typing.Final[re.Pattern] = re.compile(r"[\w\-()\[\].\'+?!/\\~&%]+")
 
 
+class _Token(enum.Enum):
+    comma = enum.auto()
+    lbrace = enum.auto()
+    rbrace = enum.auto()
+    scope = enum.auto()
+
+
 # TODO: Return a HierarchicalTagsDict instead of Tags?
 def _define_parser() -> parsy.Parser[str, Tags]:
-    from parsy import Parser, generate, eof, regex, alt, whitespace, string, fail, match_item, test_item
-    
-    class Token(enum.IntEnum):
-        comma = enum.auto()
-        lbrace = enum.auto()
-        rbrace = enum.auto()
-        scope = enum.auto()
+    from parsy import Parser, generate, eof, regex, alt, whitespace, string, fail, match_item, test_item, peek
     
     # Lexer
     
-    opt_space = regex(r"\s*")
+    opt_space = regex(r"\s*").desc("optional whitespace")
     
-    plain_tag_word = regex(_PLAIN_TAG_WORD_RE)
+    plain_tag_word = regex(_PLAIN_TAG_WORD_RE).desc("simple tag word")
     
     plain_tag = (
         plain_tag_word
-        .sep_by(whitespace, min=1)
+        .sep_by(whitespace.desc("whitespace"), min=1)
         .map(" ".join)
         .desc("simple tag")
     )
     
     quoted_tag = (
-        string('"').desc("opening quote") >>
+        string('"') >>
         alt(
             regex(r"[^\"\\\x00-\x1f\x7f-\x9f]+"),
             regex(r"\t").result(" "),
@@ -674,49 +746,49 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             regex(r"\x00-\x1f\x7f-\x9f") >> fail("forbidden control characters"),
             eof >> fail("unclosed quoted tag"),
         ).many()
-        << string('"').desc("closing quote")
+        << string('"')
     ).map("".join).desc("quoted tag")
     
-    lexer: Parser[str, list[Token | str]] = alt(
+    lexer: Parser[str, list[_Token | str]] = alt(
         opt_space >> plain_tag,
-        opt_space >> quoted_tag,
-        (opt_space >> string(",")).result(Token.comma),
-        (opt_space >> string("::")).result(Token.scope),
-        (opt_space >> string("{")).result(Token.lbrace),
-        (opt_space >> string("}")).result(Token.rbrace),
-    ).desc("token").many() << opt_space << eof
+        opt_space >> quoted_tag,  # TODO: peek(string('"')) >> commit() >> , if that suggestion to parsy is accepted and implemented
+        (opt_space >> string(",")).result(_Token.comma),
+        (opt_space >> string("::")).result(_Token.scope),
+        (opt_space >> string("{")).result(_Token.lbrace),
+        (opt_space >> string("}")).result(_Token.rbrace),
+    ).many() << opt_space << eof
     
     # Parser
     
-    single_tag: Parser[list[Token | str], Tag] = (
+    single_tag: Parser[list[_Token | str], Tag] = (
         test_item(lambda x: isinstance(x, str), "tag literal")
-        .sep_by(match_item(Token.scope), min=1)
+        .sep_by(match_item(_Token.scope, "namespace separator"), min=1)
         .map(lambda x: Tag(tuple(x)))
     )
     
     @generate
-    def tag_with_children() -> typing.Generator[Parser[list[Token | str], typing.Any], typing.Any, Tags]:
+    def tag_with_children() -> typing.Generator[Parser[list[_Token | str], typing.Any], typing.Any, Tags]:
         tag: Tag = yield single_tag
         children: Tags = yield (
-            match_item(Token.lbrace)
+            match_item(_Token.lbrace, "left brace")
             .then(parser)
-            .skip(match_item(Token.rbrace))
-            .optional([])
+            .skip(match_item(_Token.rbrace, "right brace"))
+            .optional(Tags())
         )
-        return children.move_all(tag, force=True).add(tag)
+        return children.move_all(tag, force=True).add([tag])
     
     @generate("hierarchical tags")
-    def parser() -> typing.Generator[Parser[list[Token | str], typing.Any], typing.Any, Tags]:
+    def parser() -> typing.Generator[Parser[list[_Token | str], typing.Any], typing.Any, Tags]:
         result: Tags | None = (yield tag_with_children.optional())
         if result is None:
             return Tags()
-        for more in (yield match_item(Token.comma).then(tag_with_children).many()):
+        for more in (yield match_item(_Token.comma, "comma").then(tag_with_children).many()):
             more: list[Tags]
             result.add(more, match="path")
-        yield match_item(Token.comma).optional()
+        yield match_item(_Token.comma, "comma").optional()
         return result
     
-    return lexer.bind(parser)
+    return lexer.map(parser.parse)
 
 
 _HIERARCHICAL_TAGS_PARSER: typing.Final[parsy.Parser[str, Tags]] = _define_parser()
