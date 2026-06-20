@@ -222,7 +222,7 @@ class Tags:
                     expectations = f"one of: {expectations}"
                     
                 # Temporary workaround until my suggestion to parsy is implemented
-                if "quoted tag" in expected and symbol == f"symbol {'"'!r}":
+                if "quoted tag literal" in expected and symbol == f"symbol {'"'!r}":
                     expectations = "valid quoted tag. Make sure that your quoted tag starts and ends with double quotes, has valid backslash escaping for '\\\\' and '\\\"', doesn't have any other escape sequences, ends within the same line and doesn't contain unicode control characters"
                 
                 message = f"Unexpected {symbol} at position {index}. Expected {expectations}."
@@ -733,7 +733,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
         plain_tag_word
         .sep_by(whitespace.desc("whitespace"), min=1)
         .map(" ".join)
-        .desc("simple tag")
+        .desc("simple tag literal")
     )
     
     quoted_tag = (
@@ -748,7 +748,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             eof >> fail("unclosed quoted tag"),
         ).many()
         << string('"')
-    ).map("".join).desc("quoted tag")
+    ).map("".join).desc("quoted tag literal")
     
     lexer: Parser[str, list[_Token | str]] = alt(
         opt_space >> plain_tag,
@@ -762,7 +762,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
     # Parser
     
     single_tag: Parser[list[_Token | str], Tag] = (
-        test_item(lambda x: isinstance(x, str), "tag literal")
+        test_item(lambda x: isinstance(x, str), "tag")
         .sep_by(match_item(_Token.scope, "namespace separator"), min=1)
         .map(lambda x: Tag(tuple(x)))
     )
