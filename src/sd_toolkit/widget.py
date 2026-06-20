@@ -78,6 +78,11 @@ class TagGroup:
         if scope is not None:
             scope = Tag.cast(scope)
             tags.move_all(scope)
+        elif tags:
+            scope = next(iter(tags)).path
+            for tag in tags:
+                scope = tuple(x for x, _ in itertools.takewhile(lambda p: p[0] == p[1], zip(scope, tag.path)))
+            scope = Tag.cast(scope) if scope else None
         
         self.__attrs_init__(
             tags=tags,
@@ -85,12 +90,13 @@ class TagGroup:
             scope=scope,
         )
     
-    def subgroups(self, *subgroups: TagGroup | TagsLike) -> typing.Self:
+    def subgroups(self, *subgroups: TagGroup | TagsLike, inherit_scope: typing.Literal["auto"] | bool = "auto") -> typing.Self:
+        
         for subgroup in subgroups:
             if not isinstance(subgroup, TagGroup):
                 subgroup = TagGroup(subgroup)
             
-            if subgroup._scope is None and self._scope is not None:
+            if self._scope is not None and (inherit_scope is True or (inherit_scope == "auto" and subgroup._scope is None)):
                 subgroup._tags.move_all(self._scope)
                 subgroup._scope = self._scope
             
