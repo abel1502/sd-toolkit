@@ -167,7 +167,8 @@ class Tags:
         if isinstance(tags, cls):
             return tags
         if isinstance(tags, str):
-            # TODO: Try parsing hierarchical first, fall back to plain on error?
+            if re.search(r"::|{|}", tags):
+                return cls.parse_hierarchical(tags)
             return cls.parse_plain(tags)
         if isinstance(tags, dict):
             return cls.from_hierarchical_dict(tags)
