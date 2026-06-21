@@ -269,12 +269,13 @@ class TaggerWidget(anywidget.AnyWidget):
     def _do_switch_image(self, event: SwitchImageMessage) -> None:
         logger.debug(f"Switch image {event}")
         
-        if event.idx in range(self.image_count):
-            self.load_image(event.idx)
-        else:
-            # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
-            self.image = ""
-            self.image_idx = event.idx
+        with self.hold_sync():
+            if event.idx in range(self.image_count):
+                self.load_image(event.idx)
+            else:
+                # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
+                self.image = ""
+                self.image_idx = event.idx
     
     def load_image(self, idx: int) -> None:
         image = self._dataset[idx]
@@ -300,9 +301,10 @@ class TaggerWidget(anywidget.AnyWidget):
             for tag in group.tags:
                 tag.present = image.tags.has(tag.path, match="path")
         
-        self.image_idx = idx
-        self.image = image_url
-        self.tag_groups = tag_groups
+        with self.hold_sync():
+            self.image_idx = idx
+            self.image = image_url
+            self.tag_groups = tag_groups
     
     @cachetools.cached(
         cache=cachetools.LRUCache(maxsize=5),
