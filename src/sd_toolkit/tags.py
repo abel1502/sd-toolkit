@@ -536,8 +536,9 @@ class Tags:
         
         return self
     
-    # TODO: Some special handling for tag occurences in paths?
-    def filter_str(self, func: typing.Callable[[str], bool]) -> typing.Self:
+    def filter_str(self, func: typing.Callable[[str], bool], *, affect_path: bool = False) -> typing.Self:
+        if affect_path:
+            return self.filter(lambda tag: any(func(part) for part in tag.path))
         return self.filter(lambda tag: func(tag.tag))
     
     def map(self, func: typing.Callable[[Tag], TagLike]) -> typing.Self:
