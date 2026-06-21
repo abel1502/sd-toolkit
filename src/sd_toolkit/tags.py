@@ -173,8 +173,10 @@ class Tags:
             self._tags.add(Tag.cast(tag))
     
     @classmethod
-    def cast(cls, tags: TagsLike) -> Tags:
+    def cast(cls, tags: TagsLike, *, clone: bool = False) -> Tags:
         if isinstance(tags, cls):
+            if clone:
+                return tags.clone()
             return tags
         if isinstance(tags, str):
             if re.search(r"::|{|}", tags):
@@ -300,11 +302,13 @@ class Tags:
         indent: int | None = None,
         trailing_comma: bool = True,
         orphans: typing.Literal["allow", "warn", "raise"] = "warn",
+        tag_format_hook: TagFormatHook | None = None,
     ) -> str:
         return format_hierarchical_dict(
             self.to_hierarchical_dict(orphans=orphans),
             indent=indent,
             trailing_comma=trailing_comma,
+            tag_format_hook=tag_format_hook,
         )
     
     def __str__(self) -> str:
@@ -343,13 +347,19 @@ class Tags:
         assert match == "tag"
         return list(self._tags.by.tag[tag.tag])
     
-    def find_only(self, tag: TagLike, *, match: TagMatch = "auto") -> Tag:
+    def find_only_or[Default](self, tag: TagLike, default: Default, *, match: TagMatch = "auto") -> Tag | Default:
         tags = self.find(tag, match=match)
         if len(tags) == 1:
             return tags[0]
         if len(tags) == 0:
-            raise ValueError(f"Tag {tag!r} not found in {self!r}")
+            return default
         raise ValueError(f"Found ambiguous match for {tag!r} in {self!r}: {tags!r}")
+    
+    def find_only(self, tag: TagLike, *, match: TagMatch = "auto") -> Tag:
+        result = self.find_only_or(tag, None, match=match)
+        if result is None:
+            raise ValueError(f"Tag {tag!r} not found in {self!r}")
+        return result
     
     def count(self, tag: TagLike, *, match: TagMatch = "auto") -> int:
         return len(self.find(tag, match=match))
@@ -371,13 +381,19 @@ class Tags:
     def find_pred(self, func: typing.Callable[[Tag], bool]) -> list[Tag]:
         return [tag for tag in self if func(tag)]
     
-    def find_only_pred(self, func: typing.Callable[[Tag], bool]) -> Tag:
+    def find_only_pred_or[Default](self, func: typing.Callable[[Tag], bool], default: Default) -> Tag | Default:
         tags = self.find_pred(func)
         if len(tags) == 1:
             return tags[0]
         if len(tags) == 0:
-            raise ValueError(f"No matching tags found in {self!r}")
+            return default
         raise ValueError(f"Found ambiguous matching tags in {self!r}: {tags!r}")
+    
+    def find_only_pred(self, func: typing.Callable[[Tag], bool]) -> Tag:
+        result = self.find_only_pred_or(func, None)
+        if result is None:
+            raise ValueError(f"No matching tags in {self!r}")
+        return result
 
     def count_pred(self, func: typing.Callable[[Tag], bool]) -> int:
         return sum(func(tag) for tag in self)
@@ -414,7 +430,7 @@ class Tags:
     def remove(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
         tags = Tags.cast(tags)
         
-        if not tags.has_all(self, match=match):
+        if not self.has_all(tags, match=match):
             raise ValueError(f"One of {tags!r} is not present in {self!r}") from None
         
         for tag in tags:
@@ -459,7 +475,7 @@ class Tags:
             self._tags.remove(tag)
         
         try:
-            self.add(Tags.cast(replacement), match="path")
+            self.add(replacement, match="path")
         except ValueError:
             # Shouldn't fail since we just removed these exact tags
             self.add(original, match="path")
@@ -684,12 +700,26 @@ attrs.resolve_types(Tags)
 type HierarchicalTagsDict = dict[str, HierarchicalTagsDict]
 
 
+class TagFormatHook(typing.Protocol):
+    def __call__(
+        self,
+        formatted: str,
+        path: tuple[str, ...],
+        children: HierarchicalTagsDict,
+    ) -> str:
+        ...
+
+
 def format_hierarchical_dict(
     tags_dict: HierarchicalTagsDict,
     *,
     indent: int | None = None,
     trailing_comma: bool = True,
+    tag_format_hook: TagFormatHook | None = None,
 ) -> str:
+    if tag_format_hook is None:
+        tag_format_hook = lambda formatted, path, children: formatted
+    
     single_line = indent is None
     
     def quote_key(s: str) -> str:
@@ -704,29 +734,36 @@ def format_hierarchical_dict(
     def flatten_chain(
         key: str,
         value: HierarchicalTagsDict,
-    ) -> tuple[str, HierarchicalTagsDict]:
-        parts = [key]
+        path: tuple[str, ...],
+    ) -> tuple[str, HierarchicalTagsDict, tuple[str, ...]]:
+        path += (key,)
+        parts = [
+            tag_format_hook(quote_key(key), path, value)
+        ]
         
         while isinstance(value, dict) and len(value) == 1:
             (next_key, next_value), = value.items()
-            parts.append(next_key)
+            path += (next_key,)
+            parts.append(
+                tag_format_hook(quote_key(next_key), path, next_value)
+            )
             value = next_value
         
-        key = "::".join(quote_key(part) for part in parts)
+        key = "::".join(parts)
         
-        return key, value
+        return key, value, path
     
-    def render_block(tags_dict: HierarchicalTagsDict, level: int) -> str:
+    def render_block(tags_dict: HierarchicalTagsDict, level: int, path: tuple[str, ...]) -> str:
         if not tags_dict:
             return ""
         
         rendered_items: list[str] = []
         
         for key, value in tags_dict.items():
-            text, rest = flatten_chain(key, value)
+            text, rest, subpath = flatten_chain(key, value, path)
             
             if rest:
-                text += " " + render_block(rest, level + 1)
+                text += " " + render_block(rest, level + 1, subpath)
             
             rendered_items.append(text)
         
@@ -756,7 +793,7 @@ def format_hierarchical_dict(
         
         return "\n".join(lines)
     
-    return render_block(tags_dict, 0)
+    return render_block(tags_dict, 0, ())
 
 
 # Note: deliberately doesn't include some characters found in danbooru tags.
@@ -830,7 +867,10 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             .skip(match_item(_Token.rbrace, "right brace"))
             .optional(Tags())
         )
-        return children.move_all(tag, force=True).add([tag])
+        return children.move_all(tag, force=True).ensure([
+            Tag.cast(tag.path[:i + 1])
+            for i in range(len(tag.path))
+        ], match="path")
     
     @generate("hierarchical tags")
     def parser() -> typing.Generator[Parser[list[_Token | str], typing.Any], typing.Any, Tags]:
@@ -839,7 +879,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             return Tags()
         for more in (yield match_item(_Token.comma, "comma").then(tag_with_children).many()):
             more: list[Tags]
-            result.add(more, match="path")
+            result.ensure(more, match="path")
         yield match_item(_Token.comma, "comma").optional()
         return result
     
@@ -856,4 +896,7 @@ __all__ = [
     "TagsLike",
     "TagMatch",
     "Tags",
+    "HierarchicalTagsDict",
+    "TagFormatHook",
+    "format_hierarchical_dict",
 ]

@@ -68,7 +68,7 @@ class TagGroup:
         hotkey: str | None = None,
         scope: TagLike | None = None,
     ):
-        tags = Tags.cast(tags)
+        tags = Tags.cast(tags, clone=True)
         
         if hotkey is not None:
             if not re.fullmatch(r"[a-zA-Z0-9]", hotkey):
@@ -91,7 +91,6 @@ class TagGroup:
         )
     
     def subgroups(self, *subgroups: TagGroup | TagsLike, inherit_scope: typing.Literal["auto"] | bool = "auto") -> typing.Self:
-        
         for subgroup in subgroups:
             if not isinstance(subgroup, TagGroup):
                 subgroup = TagGroup(subgroup)
