@@ -208,7 +208,7 @@ class Tags:
         try:
             return _HIERARCHICAL_TAGS_PARSER.parse(text)
         except parsy.ParseError as e:
-            expected: list[s] = e.expected
+            expected: list[str] = e.expected
             stream: str | list[_Token | str] = e.stream
             index: int = e.index
             
@@ -583,13 +583,25 @@ class Tags:
         """
         Elevates flat tags to positions in the hierarchy corresponding to the template.
         Doesn't add new tags, except for duplicating a flat tag with multiple matching positions in the hierarchy.
+        In particular, doesn't promote subtags if the parent tag is absent.
+        
+        :param template: The template hierarchy to promote to.
+        :returns: The same Tags object, modified in-place.
+        
+        Examples
+        ---
         
         >>> tags = Tags.cast("1, 2, 3, 4, 5")
         >>> tags.promote_hierarchy("1 { 2, 3, foo }, 5 { 1, 4, bar }, baz")
         Tags.cast('1 { 2, 3 }, 5 { 1, 4 }')
         
-        :param template: The template hierarchy to promote to.
-        :returns: The same Tags object, modified in-place.
+        >>> tags = Tags.cast("2, 3")
+        >>> tags.promote_hierarchy("1 { 2, 3 }")
+        Tags.cast('2, 3')
+        
+        >>> tags = Tags.cast("2, 3, 4")
+        >>> tags.promote_hierarchy("1 { 2, 3 }, 4 { 2, 3 }")
+        Tags.cast('4 { 2, 3 }')
         """
         
         template = Tags.cast(template)
@@ -600,8 +612,11 @@ class Tags:
             
             return [
                 tag.moved(prototype.path)
-                for prototype
-                in template.find(tag, match="tag")
+                for prototype in template.find(tag, match="tag")
+                if prototype.is_flat() or (
+                    self.has(prototype.parent_path, match="path") or
+                    self.has((prototype.path[-2],), match="path")
+                ) 
             ] or tag
         
         self.flatmap(_promote_tag)
