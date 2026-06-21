@@ -530,6 +530,12 @@ class Tags:
         from_ = Tag.cast(from_)
         return self.move(from_, from_.renamed(to), match=match, with_children=with_children)
     
+    def flatten(
+        self,
+        pred: typing.Callable[[Tag], bool] = lambda tag: True,
+    ) -> typing.Self:
+        return self.map(lambda tag: tag.moved((), parent_only=True) if pred(tag) else tag)
+    
     def add_metadata(
         self,
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
@@ -537,6 +543,12 @@ class Tags:
         **metadata: typing.Unpack[TagMetadata],
     ) -> typing.Self:
         return self.map(lambda tag: tag.with_metadata(**metadata) if pred(tag) else tag)
+    
+    def clear_metadata(
+        self,
+        pred: typing.Callable[[Tag], bool] = lambda tag: True,
+    ) -> typing.Self:
+        return self.map(lambda tag: tag.strip_metadata(drop_all=True) if pred(tag) else tag)
     
     def mark_trigger(
         self,

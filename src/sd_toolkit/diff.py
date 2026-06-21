@@ -40,8 +40,8 @@ class TagsDiff:
         )
         
         if flatten:
-            self.old.map(lambda tag: tag.moved((), parent_only=True))
-            self.new.map(lambda tag: tag.moved((), parent_only=True))
+            self.old.flatten()
+            self.new.flatten()
         
         self.old.map(lambda tag: tag.with_metadata(
             **self._compute_old_metdatada(tag),

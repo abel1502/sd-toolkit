@@ -4,6 +4,9 @@ import re
 import copy
 from compression.zstd import ZstdFile
 import shutil
+import collections
+import math
+import itertools
 
 from loguru import logger
 import attrs
@@ -12,7 +15,7 @@ import cbor2
 from cattrs.preconf import cbor2 as cattrs_cbor2
 from pydantic import BaseModel
 
-from sd_toolkit.tags import Tags, Tag
+from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 
 
@@ -304,7 +307,68 @@ class Dataset(typing.Sequence[TaggedImage]):
     def __len__(self) -> int:
         return len(self.contents)
 
-    # TODO: Tags accessor
+    # TODO: Tags accessor(s)
+    def all_tags(self) -> Tags:
+        tags = Tags()
+        for img in self.contents:
+            tags.add(img.tags.flatten().clear_metadata())
+        return tags
+    
+    def tag_frequencies(
+        self,
+        where: typing.Callable[[Tags], bool] | TagsLike = lambda tags: True,
+        *,
+        top: int | None = None,
+    ) -> dict[str, int]:
+        if not callable(where):
+            where = lambda tags, expected=where: tags.has_all(expected)
+        
+        result = collections.Counter()
+        for img in self.contents:
+            tags = img.tags
+            if where(tags):
+                result.update(tag.tag for tag in tags)
+        
+        return dict(result.most_common(top))
+    
+    def tag_cooccurence(
+        self,
+        target: typing.Callable[[Tags], bool] | TagsLike,
+        *,
+        top: int | None = None,
+    ) -> dict[str, float]:
+        """
+        .. Note::
+            Computes the PMI * frequency.
+        """
+        
+        if not callable(target):
+            target = lambda tags, expected=target: tags.has_all(expected)
+        
+        frequencies_target = self.tag_frequencies(where=target)
+        count_target = sum(target(img.tags) for img in self.contents)
+        frequencies_total = self.tag_frequencies()
+        count_total = len(self)
+        
+        result: dict[str, float] = {}
+        
+        for tag, pair_freq in frequencies_target.items():
+            p_tag_target = pair_freq / count_target
+            p_tag_total = frequencies_total[tag] / count_total
+
+            lift = p_tag_target / p_tag_total
+            pmi = math.log(lift) * pair_freq
+            result[tag] = pmi
+        
+        return {
+            k: v
+            for k, v in itertools.islice(sorted(
+                result.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ), top)
+        }
+        
 
 
 attrs.resolve_types(TaggedImage)

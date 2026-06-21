@@ -29,6 +29,7 @@ dependencies = [
     "requests>=2.34.2",
     "rich>=15.0.0",
     "sortedcontainers>=2.4.0",
+    "sortedcontainers-stubs>=2.4.3",
     "sqlitedict>=2.1.0",
     "tqdm>=4.67.3",
     "types-frozendict>=2.0.9",
