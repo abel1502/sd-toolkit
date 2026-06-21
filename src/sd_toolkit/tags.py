@@ -627,6 +627,7 @@ attrs.resolve_types(Tag)
 attrs.resolve_types(Tags)
 
 
+# TODO: encode extra parameters in fields starting with \x10 (data link escape)
 type HierarchicalTagsDict = dict[str, HierarchicalTagsDict]
 
 
