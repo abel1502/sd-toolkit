@@ -297,13 +297,10 @@ class Tags:
         )
     
     def __str__(self) -> str:
-        return self.to_plain()
+        return self.to_hierarchical_str()
     
     def __repr__(self) -> str:
-        return f"<Tags {self.to_plain(trailing_comma=False)!r}>"
-    
-    def __rich_repr__(self) -> typing.Generator[typing.Any | tuple[str, typing.Any] | tuple[str, typing.Any, typing.Any], None, None]:
-        yield from self
+        return f"Tags.cast({self.to_hierarchical_str(trailing_comma=False)!r})"
     
     def __len__(self) -> int:
         return len(self._tags)
