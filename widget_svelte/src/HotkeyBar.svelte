@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { shortcut, type ShortcutEventDetail, type ShortcutModifierDefinition } from './shortcut';
+  import { shortcut, type ShortcutEventDetail, type ShortcutModifierDefinition } from '@svelte-put/shortcut';
 
   import type { TagGroupInfo, ToggleGroupEvent } from "./types";
   import { isGroupPresent } from "./utils";
