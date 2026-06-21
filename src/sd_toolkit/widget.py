@@ -193,7 +193,7 @@ class TaggerWidget(anywidget.AnyWidget):
                 group.flatten()
                 for group in groups
             ):
-                combined_tags.ensure(group._tags, match="path")
+                combined_tags.add(group._tags, match="path")
             
             for image in dataset:
                 image.tags.promote_hierarchy(combined_tags)

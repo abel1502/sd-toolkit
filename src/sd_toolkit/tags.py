@@ -407,7 +407,7 @@ class Tags:
     def all_pred(self, func: typing.Callable[[Tag], bool]) -> bool:
         return all(func(tag) for tag in self)
     
-    def add(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def add_strict(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
         tags = Tags.cast(tags)
         
         if self.has_any(tags, match=match):
@@ -417,7 +417,7 @@ class Tags:
         
         return self
 
-    def ensure(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def add(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
         tags = Tags.cast(tags)
         
         for tag in tags:
@@ -427,7 +427,7 @@ class Tags:
         return self
     
     # TODO: Here and elsewhere, maybe add some handling for subtags simultaneously with the owner tag?
-    def remove(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def remove_strict(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
         tags = Tags.cast(tags)
         
         if not self.has_all(tags, match=match):
@@ -439,7 +439,7 @@ class Tags:
         
         return self
     
-    def discard(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def remove(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
         tags = Tags.cast(tags)
         
         for tag in tags:
@@ -475,10 +475,10 @@ class Tags:
             self._tags.remove(tag)
         
         try:
-            self.add(replacement, match="path")
+            self.add_strict(replacement, match="path")
         except ValueError:
             # Shouldn't fail since we just removed these exact tags
-            self.add(original, match="path")
+            self.add_strict(original, match="path")
             raise
         
         return self
@@ -867,7 +867,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             .skip(match_item(_Token.rbrace, "right brace"))
             .optional(Tags())
         )
-        return children.move_all(tag, force=True).ensure([
+        return children.move_all(tag, force=True).add([
             Tag.cast(tag.path[:i + 1])
             for i in range(len(tag.path))
         ], match="path")
@@ -879,7 +879,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             return Tags()
         for more in (yield match_item(_Token.comma, "comma").then(tag_with_children).many()):
             more: list[Tags]
-            result.ensure(more, match="path")
+            result.add(more, match="path")
         yield match_item(_Token.comma, "comma").optional()
         return result
     
