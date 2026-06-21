@@ -156,6 +156,7 @@ class TaggerWidget(anywidget.AnyWidget):
         *,
         # TODO: configuration for saving choices (image identity -> decisions for it)
         auto_hotkeys: typing.Literal["top_level", "all"] | None = None,
+        auto_promote: bool = False,
         out_capture: typing.Callable[[_Callback], _Callback] = lambda f: f,
     ):
         """
@@ -186,6 +187,17 @@ class TaggerWidget(anywidget.AnyWidget):
         else:
             def infer_hotkey(level: int) -> str | None:
                 return None
+        
+        if auto_promote:
+            combined_tags = Tags()
+            for _, group in itertools.chain.from_iterable(
+                group.flatten()
+                for group in groups
+            ):
+                combined_tags.ensure(group._tags, match="path")
+            
+            for image in dataset:
+                image.tags.promote_hierarchy(combined_tags)
         
         tag_groups = [
             TagGroupInfo(

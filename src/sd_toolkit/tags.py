@@ -89,6 +89,12 @@ class Tag:
     def __str__(self) -> str:
         return self.tag
     
+    def is_flat(self) -> bool:
+        return len(self.path) == 1
+    
+    def is_nested(self) -> bool:
+        return len(self.path) > 1
+    
     def is_child_of(self, tag: TagLike) -> bool:
         tag = Tag.cast(tag)
         
@@ -99,6 +105,10 @@ class Tag:
         
         return tag.is_child_of(self)
     
+    @property
+    def parent_path(self) -> tuple[str, ...]:
+        return self.path[:-1]
+    
     def moved(self, path: tuple[str, ...], *, parent_only: bool = False) -> Tag:
         if parent_only:
             path = path + (self.tag,)
@@ -106,7 +116,7 @@ class Tag:
         return attrs.evolve(self, path=path)
     
     def renamed(self, tag: str) -> Tag:
-        return self.moved(self.path[:-1] + (tag,))
+        return self.moved(self.parent_path + (tag,))
     
     def with_metadata(self, /, **metadata: typing.Unpack[TagMetadata]) -> Tag:
         return attrs.evolve(self, metadata=self.metadata | metadata)
@@ -263,16 +273,17 @@ class Tags:
         *,
         orphans: typing.Literal["allow", "warn", "raise"] = "warn",
     ) -> HierarchicalTagsDict:
-        for tag in list(self):
-            if len(tag.path) == 1 or self.has(tag.path[:-1], match="path"):
-                continue
-            if orphans == "raise":
-                raise ValueError(f"Tag {tag!r} is orphaned in {self!r} ({tag.path[:-1]} is missing)")
-            if orphans == "warn":
-                logger.warning(
-                    f"Tag {tag!r} is orphaned in {self!r}. Adding {tag.path[:-1]} to compensate. "
-                    f"If you'd like to disable this warning, use orphans=\"allow\" or orphans=\"raise\"."
-                )
+        if orphans != "allow":
+            for tag in list(self):
+                if tag.is_flat() or self.has(tag.parent_path, match="path"):
+                    continue
+                if orphans == "raise":
+                    raise ValueError(f"Tag {tag!r} is orphaned in {self!r} ({tag.parent_path} is missing)")
+                if orphans == "warn":
+                    logger.warning(
+                        f"Tag {tag!r} is orphaned in {self!r}. Adding {tag.parent_path} to compensate. "
+                        f"If you'd like to disable this warning, use orphans=\"allow\" or orphans=\"raise\"."
+                    )
         
         result: HierarchicalTagsDict = {}
         
@@ -300,7 +311,7 @@ class Tags:
         return self.to_hierarchical_str()
     
     def __repr__(self) -> str:
-        return f"Tags.cast({self.to_hierarchical_str(trailing_comma=False)!r})"
+        return f"Tags.cast({self.to_hierarchical_str(trailing_comma=False, orphans='allow')!r})"
     
     def __len__(self) -> int:
         return len(self._tags)
@@ -321,7 +332,7 @@ class Tags:
         tag = Tag.cast(tag)
         
         if match == "auto":
-            match = "tag" if len(tag.path) == 1 else "path"
+            match = "tag" if tag.is_flat() else "path"
         
         if match == "path":
             found = self._tags.by.path.get(tag.path, None)
@@ -568,6 +579,35 @@ class Tags:
     def flatmap_str(self, func: typing.Callable[[str], str | typing.Iterable[str]]) -> typing.Self:
         return self.flatmap(lambda tag: (tag.renamed(new_tag.tag) for new_tag in Tags.cast(func(tag.tag))))
     
+    def promote_hierarchy(self, template: TagsLike) -> typing.Self:
+        """
+        Elevates flat tags to positions in the hierarchy corresponding to the template.
+        Doesn't add new tags, except for duplicating a flat tag with multiple matching positions in the hierarchy.
+        
+        >>> tags = Tags.cast("1, 2, 3, 4, 5")
+        >>> tags.promote_hierarchy("1 { 2, 3, foo }, 5 { 1, 4, bar }, baz")
+        Tags.cast('1 { 2, 3 }, 5 { 1, 4 }')
+        
+        :param template: The template hierarchy to promote to.
+        :returns: The same Tags object, modified in-place.
+        """
+        
+        template = Tags.cast(template)
+        
+        def _promote_tag(tag: Tag) -> TagsLike:
+            if not tag.is_flat():
+                return tag
+            
+            return [
+                tag.moved(prototype.path)
+                for prototype
+                in template.find(tag, match="tag")
+            ] or tag
+        
+        self.flatmap(_promote_tag)
+        
+        return self
+    
     _BAD_TAGS_RE: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(
         r"""
         tagme |
@@ -641,10 +681,10 @@ def format_hierarchical_dict(
         if _PLAIN_TAG_WORD_RE.fullmatch(s):
             return s
         
-        return s.translate(str.maketrans({
+        return f'"{s.translate(str.maketrans({
             "\\": "\\\\",
             "\"": '\\"',
-        }))
+        }))}"'
     
     def flatten_chain(
         key: str,
