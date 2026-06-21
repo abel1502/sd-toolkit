@@ -86,16 +86,16 @@
       <span class="text-green-800 font-bold absolute">Done!</span>
     </div>
   {:else}
-    <div class="flex flex-row gap-6 resize-y min-h-48 h-64 max-h-[50vw] overflow-hidden" transition:slide>
-      <div class="grid place-items-center h-full min-h-full aspect-square bg-gray-100 rounded-lg border border-gray-300 overflow-hidden">
+    <div class="flex flex-row gap-6 resize-y min-h-48 h-64 overflow-hidden" transition:slide>
+      <div class="grid place-items-center h-full max-h-[35vw] aspect-square bg-gray-100 rounded-lg border border-gray-300 overflow-hidden">
         {#if image}
-          <img src={image} alt="Preview" class="w-full h-full object-contain"/>
+          <img src={image} alt="Preview" class="w-full h-full object-contain aspect-square"/>
         {:else}
           <span class="text-gray-400 text-sm text-center">No Image</span>
         {/if}
       </div>
       
-      <div class="flex-1 py-1">
+      <div class="flex-1 py-1 overflow-y-auto scrollbar-hidden">
         <TagsPanel {tagGroups} {toggleGroup} {toggleTag} />
       </div>
     </div>
