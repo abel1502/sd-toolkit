@@ -129,7 +129,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         cls,
         root: pathlib.Path | str,
         metadata_model: typing.Type[T],
-        tags_from_metadata: typing.Callable[[T], Tags],
+        tags_from_metadata: typing.Callable[[T], TagsLike],
         *,
         save_full_metadata: bool = False,
         recurse: bool = False,
@@ -144,7 +144,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             assert metadata_file.is_file()
             
             metadata = metadata_model.model_validate_json(metadata_file.read_text())
-            tags = tags_from_metadata(metadata)
+            tags = Tags.cast(tags_from_metadata(metadata))
             
             contents.append(TaggedImage(
                 path=img_file,

@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, HttpUrl
 
+from sd_toolkit.tags import Tag, Tags
+
 
 class Variant(BaseModel):
     type: str
@@ -114,6 +116,24 @@ class DanbooruPost(BaseModel):
     subcategory: str
 
 
+def convert_danbooru_tags(post: DanbooruPost) -> Tags:
+    return Tags([
+        Tag(tag).with_metadata(
+            category=category,
+            origin="danbooru",
+        )
+        for category, tags in [
+            ("artist", post.tags_artist),
+            ("character", post.tags_character),
+            ("copyright", post.tags_copyright),
+            ("general", post.tags_general),
+            ("meta", post.tags_meta),
+        ]
+        for tag in tags
+    ])
+
+
 __all__ = [
     "DanbooruPost",
+    "convert_danbooru_tags",
 ]

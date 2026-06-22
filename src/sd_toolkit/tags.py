@@ -27,6 +27,10 @@ def _convert_tag_metadata(metadata: typing.Mapping[str, typing.Any]) -> frozendi
     return frozendict(metadata)
 
 
+# TODO: Rework metadata so that members are defined separately and accessed in a unified way.
+# This will allow defining default values and merging strategies on a per-member basis.
+# Note: merging strategies must be symmetrical. Either one value is more specific (or otherwise stronger) than the other,
+# they are equivalent, or they conflict.
 class TagMetadata(typing_extensions.TypedDict, total=False, closed=False):
     category: typing.Literal["artist", "character", "copyright", "general", "meta"]
     is_trigger: bool
@@ -687,6 +691,16 @@ class Tags:
         normalize_space: bool = True,
         escape_weighted_captions: bool = False,
     ) -> Tags:
+        # if isinstance(match_origin, str):
+        #     match_origin = re.compile(match_origin)
+        # if isinstance(match_origin, re.Pattern):
+        #     match_origin = lambda x: match_origin.fullmatch(x)
+        
+        # TODO: A context manager to select a subset of tags and mutate it in place.
+        #       Implemented by initially, at the point of application, removing the original selected tags
+        #       and then adding the changed ones. May be done with an `.apply()` instead of a context manager.
+        #       The type can be a subclass of Tags.
+        
         if remove_bad_tags:
             self.filter_str(lambda x: not self._BAD_TAGS_RE.fullmatch(x))
         
@@ -702,6 +716,9 @@ class Tags:
         return self
     
     # TODO: convert_pixiv_to_booru. Query (and persistently cache!) the danbooru wiki, or optionally ask the user.
+    
+    def prefix_artist_tags(self) -> typing.Self:
+        return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag.metadata.get("category", "") == "artist" else tag)
 
 
 attrs.resolve_types(Tag)

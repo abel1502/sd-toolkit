@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, HttpUrl
 
+from sd_toolkit.tags import Tag, Tags
+
 
 class ProfileImageUrls(BaseModel):
     medium: HttpUrl
@@ -18,7 +20,7 @@ class User(BaseModel):
     is_access_blocking_user: bool
 
 
-class Tag(BaseModel):
+class PixivTag(BaseModel):
     name: str
     translated_name: str | None
 
@@ -76,7 +78,7 @@ class Workspace(BaseModel):
 
 
 # TODO: Clarify untyped `dict`s based on examples when they become available
-class Artwork(BaseModel):
+class PixivPost(BaseModel):
     id: int
     title: str
     type: str
@@ -84,7 +86,7 @@ class Artwork(BaseModel):
     restrict: int
 
     user: User
-    tags: list[Tag]
+    tags: list[PixivTag]
     tools: list[str]
 
     create_date: datetime
@@ -133,4 +135,13 @@ class Artwork(BaseModel):
 
     date_url: str
     hash: str
+
+
+def convert_pixiv_post(post: PixivPost) -> Tags:
+    return Tags([
+        Tag(tag.name).with_metadata(
+            origin="pixiv",
+        )
+        for tag in post.tags
+    ])
 
