@@ -30,13 +30,13 @@ def _strip_diff_md(md: TagMetadata) -> TagMetadata:
 
 @define(init=False)
 class TagsDiff:
-    old: Tags = field(converter=partial(Tags.cast, clone=True))
-    new: Tags = field(converter=partial(Tags.cast, clone=True))
+    old: Tags
+    new: Tags
     
     def __init__(self, old: TagsLike, new: TagsLike, *, flatten: bool = False):
         self.__attrs_init__(
-            old=old,
-            new=new,
+            old=Tags.cast(old, clone=True),
+            new=Tags.cast(new, clone=True),
         )
         
         if flatten:

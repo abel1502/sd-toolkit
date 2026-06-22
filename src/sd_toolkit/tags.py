@@ -13,6 +13,9 @@ from nanotable import Table, SortedUniqueIndex, SortedMultiIndex, ConflictError
 import parsy
 from loguru import logger
 
+if typing.TYPE_CHECKING:
+    from sd_toolkit.diff import TagsDiff
+
 
 type TagLike = Tag | str | tuple[str, ...]
 
@@ -344,6 +347,11 @@ class Tags:
     
     def pipe[T](self, func: typing.Callable[[Tags], T]) -> T:
         return func(self)
+    
+    def diff(self, old: TagsLike, *, flatten: bool = False) -> TagsDiff:
+        from sd_toolkit.diff import TagsDiff
+        
+        return TagsDiff(old, self, flatten=flatten)
     
     def find(self, tag: TagLike, *, match: TagMatch = "auto") -> list[Tag]:
         tag = Tag.cast(tag)

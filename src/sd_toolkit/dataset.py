@@ -288,7 +288,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             field: attrs.Attribute
             setattr(self, field.name, getattr(restored, field.name))
     
-    # TODO: diff method for seeing the changes between two datasets. I guess will need a diff between Tags first.
+    # TODO: diff method for seeing the changes between two datasets.
     
     @typing.overload
     def __getitem__(self, index: int) -> TaggedImage:
