@@ -206,10 +206,6 @@ class Tags:
         return ', '.join(map(str, self)) + (',' if trailing_comma and self else '')
     
     @classmethod
-    def from_hierarchical_dict(cls, tags: HierarchicalTagsDict) -> Tags:
-        raise NotImplementedError
-    
-    @classmethod
     def parse_hierarchical(cls, text: str) -> Tags:
         try:
             return _HIERARCHICAL_TAGS_PARSER.parse(text)
@@ -274,6 +270,34 @@ class Tags:
             
             raise ValueError(f"Failed to parse tags: {message}") from None
     
+    def to_hierarchical_str(
+        self,
+        *,
+        indent: int | None = None,
+        trailing_comma: bool = True,
+        orphans: typing.Literal["allow", "warn", "raise"] = "warn",
+        tag_format_hook: TagFormatHook | None = None,
+    ) -> str:
+        return format_hierarchical_dict(
+            self.to_hierarchical_dict(orphans=orphans),
+            indent=indent,
+            trailing_comma=trailing_comma,
+            tag_format_hook=tag_format_hook,
+        )
+    
+    @classmethod
+    def from_hierarchical_dict(cls, tags: HierarchicalTagsDict) -> Tags:
+        def _all_paths(prefix: tuple[str, ...], node: HierarchicalTagsDict) -> typing.Generator[tuple[str, ...], None, None]:
+            for key, value in node.items():
+                if not isinstance(value, dict):
+                    raise TypeError(f"Expected a HierarchicalTagsDict, but got an element of type {type(value)}")
+                
+                new_prefix = prefix + (key,)
+                yield new_prefix
+                yield from _all_paths(new_prefix, value)
+        
+        return cls(_all_paths((), tags))
+    
     def to_hierarchical_dict(
         self,
         *,
@@ -299,21 +323,6 @@ class Tags:
                 current = current.setdefault(path, {})
         
         return result
-    
-    def to_hierarchical_str(
-        self,
-        *,
-        indent: int | None = None,
-        trailing_comma: bool = True,
-        orphans: typing.Literal["allow", "warn", "raise"] = "warn",
-        tag_format_hook: TagFormatHook | None = None,
-    ) -> str:
-        return format_hierarchical_dict(
-            self.to_hierarchical_dict(orphans=orphans),
-            indent=indent,
-            trailing_comma=trailing_comma,
-            tag_format_hook=tag_format_hook,
-        )
     
     def __str__(self) -> str:
         return self.to_hierarchical_str()
@@ -452,6 +461,7 @@ class Tags:
         
         return self
     
+    # TODO: Deprecate? Seems fairly inconvenient
     def replace(
         self,
         original: Tag | typing.Iterable[Tag],
@@ -611,6 +621,13 @@ class Tags:
     def flatmap_str(self, func: typing.Callable[[str], str | typing.Iterable[str]]) -> typing.Self:
         return self.flatmap(lambda tag: (tag.renamed(new_tag.tag) for new_tag in Tags.cast(func(tag.tag))))
     
+    # TODO: Update stuff to use view? Or don't, I guess evaluating the condition inline might be more efficient
+    def view(self, pred: typing.Callable[[Tag], bool]) -> TagsView:
+        return TagsView(
+            base=self,
+            initial=self.clone().filter(pred),
+        )
+    
     def promote_hierarchy(self, template: TagsLike) -> typing.Self:
         """
         Elevates flat tags to positions in the hierarchy corresponding to the template.
@@ -655,6 +672,11 @@ class Tags:
         
         return self
     
+    def discard_flat_doubles(self) -> typing.Self:
+        self.view(lambda tag: tag.is_flat()).filter(lambda tag: self.count(tag, match="tag") == 1).apply()
+        
+        return self
+    
     _BAD_TAGS_RE: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(
         r"""
         tagme |
@@ -686,20 +708,30 @@ class Tags:
     def convert_booru_to_ai(
         self,
         *,
+        match_origin: str | re.Pattern | typing.Callable[[Tag], bool] | bool = False,
         remove_bad_tags: bool = True,
         remove_underscores: bool = True,
         normalize_space: bool = True,
         escape_weighted_captions: bool = False,
-    ) -> Tags:
-        # if isinstance(match_origin, str):
-        #     match_origin = re.compile(match_origin)
-        # if isinstance(match_origin, re.Pattern):
-        #     match_origin = lambda x: match_origin.fullmatch(x)
-        
-        # TODO: A context manager to select a subset of tags and mutate it in place.
-        #       Implemented by initially, at the point of application, removing the original selected tags
-        #       and then adding the changed ones. May be done with an `.apply()` instead of a context manager.
-        #       The type can be a subclass of Tags.
+    ) -> typing.Self:
+        if match_origin is not False:
+            if match_origin is True:
+                match_origin = r".*booru"
+            if isinstance(match_origin, str):
+                match_origin = re.compile(match_origin)
+            if isinstance(match_origin, re.Pattern):
+                match_origin = lambda x: match_origin.fullmatch(x)
+            
+            with self.view(match_origin) as view:
+                view.convert_booru_to_ai(
+                    match_origin=False,
+                    remove_bad_tags=remove_bad_tags,
+                    remove_underscores=remove_underscores,
+                    normalize_space=normalize_space,
+                    escape_weighted_captions=escape_weighted_captions,
+                )
+            
+            return self
         
         if remove_bad_tags:
             self.filter_str(lambda x: not self._BAD_TAGS_RE.fullmatch(x))
@@ -721,8 +753,72 @@ class Tags:
         return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag.metadata.get("category", "") == "artist" else tag)
 
 
+@attrs.define(init=False)
+class TagsView(Tags):
+    """
+    A view into a subset of tags. Allows expressing changes as if no tags existed outside of the subset.
+    
+    To apply changes made to a `TagsView`, either call `apply` or use the view in a `with` block.
+    In the latter case, `apply` will be called automatically upon exiting the block unless an exception occurred.
+    
+    To create a `TagsView`, use the `Tags.view` method.
+    
+    .. Note::
+        Regarding the internal structure:
+        - `_base` is a reference to the `Tags` object to which this is a view.
+          It is expected to remain unchanged throughout the lifetime of the `TagsView`.
+        - `_initial` is the initial state of the view.
+          It is expected to remain unchanged throughout the lifetime of the `TagsView`.
+        - The superclass is the current state of the view, with all the changes applied.
+          It starts as a copy of `_initial`, and is what is ultimately applied to `_base`.
+    """
+    
+    _base: Tags = attrs.field(validator=instance_of(Tags))
+    _initial: Tags = attrs.field(validator=instance_of(Tags))
+    
+    def __init__(self, *, base: Tags, initial: Tags):
+        self.__attrs_init__(
+            initial.clone(),
+            base=base,
+            initial=initial,
+        )
+    
+    def apply(self) -> Tags:
+        self._base.remove_strict(self._initial, match="path")
+        self._base.add(self, match="path")
+    
+    def __enter__(self) -> typing.Self:
+        return self
+    
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+        if exc is None:
+            self.apply()
+    
+    @classmethod
+    @typing.override
+    def cast(cls, *args, **kwargs) -> typing.Never:
+        raise NotImplementedError(f"Do not create {cls.__name__} instances directly. Use Tags.view() instead.")
+    
+    @classmethod
+    @typing.override
+    def parse_plain(cls, *args, **kwargs) -> typing.Never:
+        raise NotImplementedError(f"Do not create {cls.__name__} instances directly. Use Tags.view() instead.")
+    
+    @classmethod
+    @typing.override
+    def parse_hierarchical(cls, *args, **kwargs) -> typing.Never:
+        raise NotImplementedError(f"Do not create {cls.__name__} instances directly. Use Tags.view() instead.")
+    
+    @classmethod
+    @typing.override
+    def from_hierarchical_dict(cls, *args, **kwargs) -> typing.Never:
+        raise NotImplementedError(f"Do not create {cls.__name__} instances directly. Use Tags.view() instead.")
+    
+
+
 attrs.resolve_types(Tag)
 attrs.resolve_types(Tags)
+attrs.resolve_types(TagsView)
 
 
 # TODO: encode extra parameters in fields starting with \x10 (data link escape)
@@ -925,6 +1021,7 @@ __all__ = [
     "TagsLike",
     "TagMatch",
     "Tags",
+    "TagsView",
     "HierarchicalTagsDict",
     "TagFormatHook",
     "format_hierarchical_dict",
