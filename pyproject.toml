@@ -22,6 +22,7 @@ dependencies = [
     "frozendict>=2.4.7",
     "loguru>=0.7.3",
     "nanotable[sorted]>=0.1.1",
+    "pandas[compression,parquet,pyarrow]>=3.0.3",
     "parsy>=2.2",
     "parsy-stubs>=2.1.2",
     "pyarrow>=24.0.0",

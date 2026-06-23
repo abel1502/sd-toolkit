@@ -283,6 +283,8 @@ class Dataset(typing.Sequence[TaggedImage]):
             self.save_checkpoint(path, overwrite=True)
             return
         
+        # TODO: Handle if checkpoint file is deleted
+        
         restored = self.load_checkpoint(path)
         for field in attrs.fields(self):
             field: attrs.Attribute
@@ -378,14 +380,14 @@ attrs.resolve_types(Dataset)
 CBOR_CONVERTER: typing.Final[cattrs_cbor2.Cbor2Converter] = cattrs_cbor2.make_converter()
 
 @CBOR_CONVERTER.register_unstructure_hook
-def _unstructure_Tags(data: Tags, cls: typing.Type[Tags]) -> list[typing.Any]:
+def _unstructure_Tags(data: Tags) -> list[typing.Any]:
     unstructure_tag = CBOR_CONVERTER.get_unstructure_hook(Tag)
-    return [unstructure_tag(tag, Tag) for tag in data]
+    return [unstructure_tag(tag) for tag in data]
 
 @CBOR_CONVERTER.register_structure_hook
 def _structure_Tags(data: list[typing.Any], cls: typing.Type[Tags]) -> Tags:
     structure_tag = CBOR_CONVERTER.get_structure_hook(Tag)
-    return Tags([structure_tag(tag, Tag) for tag in data])
+    return cls([structure_tag(tag, Tag) for tag in data])
 
 
 # TODO: Dataset view/subset?

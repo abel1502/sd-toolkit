@@ -12,6 +12,8 @@ from frozendict import frozendict
 from nanotable import Table, SortedUniqueIndex, SortedMultiIndex, ConflictError
 import parsy
 from loguru import logger
+import pandas as pd
+import cachetools
 
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import TagsDiff
@@ -468,6 +470,10 @@ class Tags:
                 self._tags.remove(existing_tag)
         
         return self
+
+    def clear(self) -> typing.Self:
+        self._tags.clear()
+        return self
     
     # TODO: Deprecate? Seems fairly inconvenient
     def replace(
@@ -685,6 +691,29 @@ class Tags:
         
         return self
     
+    def discard_implications(self, implications: pd.DataFrame) -> typing.Self:
+        to_remove: set[str] = set()
+        
+        for tag in self:
+            to_remove.update(self.tag_implications(tag.tag, implications))
+        
+        self.remove(to_remove, match="tag")
+        
+        return self
+    
+    @classmethod
+    @cachetools.cached(cache=cachetools.LRUCache(maxsize=1024), key=lambda cls, tag, implications: (tag, id(implications)))
+    def tag_implications(cls, tag: str, implications: pd.DataFrame) -> set[str]:
+        if "antecedent_name" not in implications.columns or "consequent_name" not in implications.columns:
+            raise ValueError(f"The implication table must contain `antecedent_name` and `consequent_name` columns, got {implications.columns}.")
+        
+        result = set(implications.pipe(lambda df: df[df["antecedent_name"] == tag]["consequent_name"]))
+        
+        for tag in list(result):
+            result.update(cls.tag_implications(tag, implications))
+        
+        return result
+    
     _BAD_TAGS_RE: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(
         r"""
         tagme |
@@ -761,7 +790,7 @@ class Tags:
         return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag.metadata.get("category", "") == "artist" else tag)
 
 
-@attrs.define(init=False)
+@attrs.define(init=False, kw_only=True)
 class TagsView(Tags):
     """
     A view into a subset of tags. Allows expressing changes as if no tags existed outside of the subset.
@@ -794,6 +823,7 @@ class TagsView(Tags):
     def apply(self) -> Tags:
         self._base.remove_strict(self._initial, match="path")
         self._base.add(self, match="path")
+        return self._base
     
     def __enter__(self) -> typing.Self:
         return self
