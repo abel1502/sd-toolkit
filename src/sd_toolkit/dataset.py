@@ -2,7 +2,6 @@ import typing
 import pathlib
 import re
 import copy
-from compression.zstd import ZstdFile
 import shutil
 import collections
 import math
@@ -11,12 +10,11 @@ import itertools
 from loguru import logger
 import attrs
 from attrs import define, field
-import cbor2
-from cattrs.preconf import cbor2 as cattrs_cbor2
 from pydantic import BaseModel
 
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
+from sd_toolkit.storage import save, load
 
 
 @define()
@@ -229,27 +227,20 @@ class Dataset(typing.Sequence[TaggedImage]):
     def clone(self) -> Dataset:
         return copy.deepcopy(self)
     
-    def save_checkpoint(self, path: pathlib.Path | str, overwrite: bool = False) -> None:
+    def save_checkpoint(self, path: pathlib.Path | str, *, overwrite: bool = False) -> None:
         if isinstance(path, str):
             path = pathlib.Path(path)
         
         logger.info(f"Saving dataset checkpoint to {path}")
         
-        if path.exists():
-            if not overwrite:
-                raise FileExistsError(f"{path} already exists and overwrite is not specified")
-            logger.warning(f"Overwriting {path}")
-        
-        with ZstdFile(path, "wb") as f:
-            cbor2.dump(CBOR_CONVERTER.unstructure(self), f)
+        save(self, path, overwrite=overwrite)
     
     @classmethod
     def load_checkpoint(cls, path: pathlib.Path | str) -> Dataset:
         if isinstance(path, str):
             path = pathlib.Path(path)
         
-        with ZstdFile(path, "rb") as f:
-            result = CBOR_CONVERTER.structure(cbor2.load(f), Dataset)
+        result = load(Dataset, path)
         
         logger.info(f"Loaded dataset checkpoint from {path}")
         
@@ -370,24 +361,10 @@ class Dataset(typing.Sequence[TaggedImage]):
                 reverse=True,
             ), top)
         }
-        
 
 
 attrs.resolve_types(TaggedImage)
 attrs.resolve_types(Dataset)
-
-
-CBOR_CONVERTER: typing.Final[cattrs_cbor2.Cbor2Converter] = cattrs_cbor2.make_converter()
-
-@CBOR_CONVERTER.register_unstructure_hook
-def _unstructure_Tags(data: Tags) -> list[typing.Any]:
-    unstructure_tag = CBOR_CONVERTER.get_unstructure_hook(Tag)
-    return [unstructure_tag(tag) for tag in data]
-
-@CBOR_CONVERTER.register_structure_hook
-def _structure_Tags(data: list[typing.Any], cls: typing.Type[Tags]) -> Tags:
-    structure_tag = CBOR_CONVERTER.get_structure_hook(Tag)
-    return cls([structure_tag(tag, Tag) for tag in data])
 
 
 # TODO: Dataset view/subset?
