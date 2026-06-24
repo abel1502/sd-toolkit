@@ -15,6 +15,7 @@ from loguru import logger
 import pandas as pd
 import cachetools
 
+from sd_toolkit.storage import CBOR_CONVERTER
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import TagsDiff
 
@@ -857,6 +858,18 @@ class TagsView(Tags):
 attrs.resolve_types(Tag)
 attrs.resolve_types(Tags)
 attrs.resolve_types(TagsView)
+
+
+@CBOR_CONVERTER.register_unstructure_hook
+def _unstructure_Tags(data: Tags) -> list[typing.Any]:
+    unstructure_tag = CBOR_CONVERTER.get_unstructure_hook(Tag)
+    return [unstructure_tag(tag) for tag in data]
+
+
+@CBOR_CONVERTER.register_structure_hook
+def _structure_Tags(data: list[typing.Any], cls: typing.Type[Tags]) -> Tags:
+    structure_tag = CBOR_CONVERTER.get_structure_hook(Tag)
+    return cls([structure_tag(tag, Tag) for tag in data])
 
 
 # TODO: encode extra parameters in fields starting with \x10 (data link escape)
