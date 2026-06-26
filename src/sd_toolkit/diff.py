@@ -140,23 +140,25 @@ class DatasetDiff:
     _all_images: dict[pathlib.Path, tuple[TaggedImage | None, TaggedImage | None]]
     
     def __init__(self, old: Dataset, new: Dataset, *, flatten_tags: bool = False):
-        self.__attrs_init__(
-            old=old.clone(),
-            new=new.clone(),
-        )
+        old = old.clone()
+        new = new.clone()
         
         if flatten_tags:
-            self.old.apply_tags(lambda tags: tags.flatten())
-            self.new.apply_tags(lambda tags: tags.flatten())
+            old.apply_tags(lambda tags: tags.flatten())
+            new.apply_tags(lambda tags: tags.flatten())
         
         all_images = {}
-        for image in self.old:
+        for image in old:
             all_images[image.path] = (image, None)
-        for image in self.new:
+        for image in new:
             in_old, _ = all_images.setdefault(image.path, (None, None))
             all_images[image.path] = (in_old, image)
         
-        self._all_images = all_images
+        self.__attrs_init__(
+            old=old,
+            new=new,
+            all_images=all_images,
+        )
     
     def pprint(
         self,
@@ -164,6 +166,7 @@ class DatasetDiff:
         inline: bool = False,
         indent: int | None = None,
         trailing_comma: bool = False,
+        hide_unchanged: bool = False,
         **kwargs,
     ) -> RichText:
         result = RichText()
@@ -184,6 +187,8 @@ class DatasetDiff:
                     **kwargs,
                 )
                 formatted = RichText.from_markup(f">> [red]-{path}\n{tags_str}[/]")
+            elif hide_unchanged:
+                continue
             else:
                 formatted = RichText(f">> {path}\n").append_text(
                     TagsDiff(image_old.tags, image_new.tags).pprint(
