@@ -6,6 +6,7 @@ import shutil
 import collections
 import math
 import itertools
+import contextlib
 
 from loguru import logger
 import attrs
@@ -15,6 +16,8 @@ from pydantic import BaseModel
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import save, load
+if typing.TYPE_CHECKING:
+    from sd_toolkit.diff import DatasetDiff
 
 
 @define()
@@ -24,11 +27,10 @@ class TaggedImage:
     full_metadata: typing.Any | None = None
 
 
-@define()
+@define(repr=False)
 class Dataset(typing.Sequence[TaggedImage]):
     root: pathlib.Path
     contents: list[TaggedImage]
-    checkpoints_history: list[pathlib.Path] = field(factory=list)
     
     _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
     
@@ -246,42 +248,30 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         return result
     
-    def checkpoint(
-        self,
-        path: pathlib.Path | str,
-    ) -> None:
-        """
-        Either saves a new checkpoint or reloads an old one. After each invocation of `checkpoint`
-        with the same `path`, the contents of the dataset will be the same.
-        
-        It is recommended to start any cell intended to change the dataset with a call to `checkpoint` to
-        ensure no progress is lost.
-        
-        .. Note::
-            Checkpoints include all metadata, but DO NOT include the contents of the images. This allows
-            checkpoints to remain very lightweight, but it means you must exercise caution when applying
-            potentially destructive operations to the dataset. `sd_toolkit` does not include any such
-            functionality.
-        
-        :param path: Path to the checkpoint. If you're struggling with the extension, `.bin` is a good choice.
-        """
-        
-        if isinstance(path, str):
-            path = pathlib.Path(path)
-        
-        if path not in self.checkpoints_history:
-            self.checkpoints_history.append(path)
-            self.save_checkpoint(path, overwrite=True)
-            return
-        
-        # TODO: Handle if checkpoint file is deleted
-        
+    def reload_checkpoint(self, path: pathlib.Path | str) -> None:
         restored = self.load_checkpoint(path)
-        for field in attrs.fields(self):
-            field: attrs.Attribute
-            setattr(self, field.name, getattr(restored, field.name))
+        self.assign_from(restored)
     
-    # TODO: diff method for seeing the changes between two datasets.
+    def assign_from(self, other: Dataset) -> None:
+        for field in attrs.fields(Dataset):
+            field: attrs.Attribute
+            setattr(self, field.name, getattr(other, field.name))
+    
+    @contextlib.contextmanager
+    def temporary_changes(self) -> typing.Generator[typing.Self, None, None]:
+        backup = self.clone()
+        try:
+            yield self
+        finally:
+            self.assign_from(backup)
+    
+    def diff(self, old: Dataset, *, flatten_tags: bool = False) -> DatasetDiff:
+        from sd_toolkit.diff import DatasetDiff
+        
+        return DatasetDiff(old, self, flatten_tags=flatten_tags)
+    
+    def __repr__(self) -> str:
+        return f"<Dataset of {len(self)} images at {self.root}>"
     
     @typing.overload
     def __getitem__(self, index: int) -> TaggedImage:
@@ -299,8 +289,23 @@ class Dataset(typing.Sequence[TaggedImage]):
     
     def __len__(self) -> int:
         return len(self.contents)
+    
+    def apply(self, func: typing.Callable[[TaggedImage], None]) -> typing.Self:
+        for img in self.contents:
+            func(img)
+        return self
 
-    # TODO: Tags accessor(s)
+    def apply_tags(self, func: typing.Callable[[Tags], None]) -> typing.Self:
+        return self.apply(lambda img: func(img.tags))
+    
+    def filter(self, func: typing.Callable[[TaggedImage], bool]) -> typing.Self:
+        self.contents = [img for img in self.contents if func(img)]
+        return self
+    
+    def filter_tags(self, func: typing.Callable[[Tags], bool]) -> typing.Self:
+        return self.filter(lambda img: func(img.tags))
+
+    # TODO: More tags accessor(s)
     def all_tags(self) -> Tags:
         tags = Tags()
         for img in self.contents:

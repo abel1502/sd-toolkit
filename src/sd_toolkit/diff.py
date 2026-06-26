@@ -1,7 +1,8 @@
 import typing
+import pathlib
 
 import rich
-import rich.text
+from rich.text import Text as RichText
 import attrs
 from attrs import define, field
 from loguru import logger
@@ -9,6 +10,7 @@ from functools import partial
 import itertools
 
 from sd_toolkit.tags import Tag, Tags, TagsLike, TagMetadata, TagFormatHook
+from sd_toolkit.dataset import Dataset, TaggedImage
 
 
 class DiffTagMetadata(TagMetadata, total=False):
@@ -28,7 +30,7 @@ def _strip_diff_md(md: TagMetadata) -> TagMetadata:
     return md
 
 
-@define(init=False)
+@define(init=False, repr=False)
 class TagsDiff:
     old: Tags
     new: Tags
@@ -81,7 +83,7 @@ class TagsDiff:
         indent: int | None = None,
         trailing_comma: bool = False,
         **kwargs,
-    ) -> rich.text.Text:
+    ) -> RichText:
         def formatter(tags: Tags) -> TagFormatHook:
             def _tag_format_hook(formatted: str, path: tuple[str, ...], children: Tags) -> str:
                 tag = tags.find_only(path, match="path")
@@ -125,9 +127,83 @@ class TagsDiff:
             
             result = f"{old_result}\n{new_result}"
         
-        return rich.text.Text.from_markup(result)
+        return RichText.from_markup(result)
+    
+    def __repr__(self) -> str:
+        return f"TagsDiff({self.old!r}, {self.new!r})"
+
+
+@define(init=False, repr=False)
+class DatasetDiff:
+    old: Dataset
+    new: Dataset
+    _all_images: dict[pathlib.Path, tuple[TaggedImage | None, TaggedImage | None]]
+    
+    def __init__(self, old: Dataset, new: Dataset, *, flatten_tags: bool = False):
+        self.__attrs_init__(
+            old=old.clone(),
+            new=new.clone(),
+        )
+        
+        if flatten_tags:
+            self.old.apply_tags(lambda tags: tags.flatten())
+            self.new.apply_tags(lambda tags: tags.flatten())
+        
+        all_images = {}
+        for image in self.old:
+            all_images[image.path] = (image, None)
+        for image in self.new:
+            in_old, _ = all_images.setdefault(image.path, (None, None))
+            all_images[image.path] = (in_old, image)
+        
+        self._all_images = all_images
+    
+    def pprint(
+        self,
+        *,
+        inline: bool = False,
+        indent: int | None = None,
+        trailing_comma: bool = False,
+        **kwargs,
+    ) -> RichText:
+        result = RichText()
+        
+        for path, (image_old, image_new) in self._all_images.items():
+            formatted: RichText
+            if image_old is None:
+                tags_str = image_new.tags.to_hierarchical_str(
+                    indent=indent,
+                    trailing_comma=trailing_comma,
+                    **kwargs,
+                )
+                formatted = RichText.from_markup(f">> [green]+{path}\n{tags_str}[/]")
+            elif image_new is None:
+                tags_str = image_old.tags.to_hierarchical_str(
+                    indent=indent,
+                    trailing_comma=trailing_comma,
+                    **kwargs,
+                )
+                formatted = RichText.from_markup(f">> [red]-{path}\n{tags_str}[/]")
+            else:
+                formatted = RichText(f">> {path}\n").append_text(
+                    TagsDiff(image_old.tags, image_new.tags).pprint(
+                        inline=inline,
+                        indent=indent,
+                        trailing_comma=trailing_comma,
+                        **kwargs,
+                    )
+                )
+            
+            result.append_text(formatted).append("\n\n")
+        
+        result.rstrip()
+        return result
+    
+    def __repr__(self) -> str:
+        return f"DatasetDiff({self.old!r}, {self.new!r})"
 
 
 __all__ = [
     "TagsDiff",
+    "DatasetDiff",
 ]
