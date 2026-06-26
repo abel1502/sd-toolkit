@@ -29,7 +29,7 @@ class TaggedImage:
 
 @define(repr=False)
 class Dataset(typing.Sequence[TaggedImage]):
-    root: pathlib.Path
+    roots: list[pathlib.Path]
     contents: list[TaggedImage]
     
     _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
@@ -120,7 +120,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         logger.info(f"Loaded a dataset of {len(contents)} images")
         
         return Dataset(
-            root=root,
+            roots=[root],
             contents=contents,
         )
     
@@ -155,7 +155,24 @@ class Dataset(typing.Sequence[TaggedImage]):
         logger.info(f"Loaded a dataset of {len(contents)} images")
         
         return Dataset(
-            root=root,
+            roots=[root],
+            contents=contents,
+        )
+    
+    @classmethod
+    def merge(
+        cls,
+        *datasets: Dataset,
+    ) -> Dataset:
+        roots = []
+        contents = []
+        
+        for dataset in datasets:
+            roots.extend(dataset.roots)
+            contents.extend(dataset.contents)
+        
+        return Dataset(
+            roots=roots,
             contents=contents,
         )
     
@@ -185,7 +202,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             dest.mkdir(parents=True, exist_ok=True)
         
         for img in self.contents:
-            dest_img_path = naming_strategy(dest, img.path.relative_to(self.root))
+            dest_img_path = naming_strategy(dest, self._rel_path(img.path))
             dest_tags_path = dest_img_path.with_suffix(".txt")
             
             assert not dest_img_path.exists()
@@ -226,6 +243,13 @@ class Dataset(typing.Sequence[TaggedImage]):
                 logger.debug(f"Zipping {dest} to {dest_zip}")
                 shutil.make_archive(dest_zip, "zip", dest)
     
+    def _rel_path(self, path: pathlib.Path) -> pathlib.Path:
+        for root in self.roots:
+            if path.is_relative_to(root):
+                return path.relative_to(self.root)
+        
+        raise ValueError(f"Path {path} is not relative to any of {self.roots}")
+    
     def clone(self) -> Dataset:
         return copy.deepcopy(self)
     
@@ -250,9 +274,9 @@ class Dataset(typing.Sequence[TaggedImage]):
     
     def reload_checkpoint(self, path: pathlib.Path | str) -> None:
         restored = self.load_checkpoint(path)
-        self.assign_from(restored)
+        self._assign_from(restored)
     
-    def assign_from(self, other: Dataset) -> None:
+    def _assign_from(self, other: Dataset) -> None:
         for field in attrs.fields(Dataset):
             field: attrs.Attribute
             setattr(self, field.name, getattr(other, field.name))
@@ -263,7 +287,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         try:
             yield self
         finally:
-            self.assign_from(backup)
+            self._assign_from(backup)
     
     def diff(self, old: Dataset, *, flatten_tags: bool = False) -> DatasetDiff:
         from sd_toolkit.diff import DatasetDiff
@@ -271,7 +295,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         return DatasetDiff(old, self, flatten_tags=flatten_tags)
     
     def __repr__(self) -> str:
-        return f"<Dataset of {len(self)} images at {self.root}>"
+        return f"<Dataset of {len(self)} images at {", ".join(map(str, self.roots))}>"
     
     @typing.overload
     def __getitem__(self, index: int) -> TaggedImage:
