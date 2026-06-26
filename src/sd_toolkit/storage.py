@@ -16,6 +16,7 @@ def save[T](
     obj: T,
     dest: pathlib.Path | str | typing.BinaryIO,
     *,
+    as_type: type[T] | None = None,
     overwrite: bool = False,
     compressed: bool = True,
     chunk_cb: typing.Callable[[bytes], None] | None = None,
@@ -27,7 +28,7 @@ def save[T](
         overwrite=overwrite,
         chunk_cb=chunk_cb,
     ) as f:
-        cbor2.dump(CBOR_CONVERTER.unstructure(obj), f)
+        cbor2.dump(CBOR_CONVERTER.unstructure(obj, as_type), f)
 
 
 def load[T](
@@ -50,6 +51,7 @@ def save_hash[T](
     obj: T,
     dest: pathlib.Path | str | typing.BinaryIO,
     *,
+    as_type: type[T] | None = None,
     overwrite: bool = False,
     compressed: bool = True,
 ) -> bytes:
@@ -61,6 +63,7 @@ def save_hash[T](
     save(
         obj,
         dest,
+        as_type=as_type,
         overwrite=overwrite,
         compressed=compressed,
         chunk_cb=h.update,
@@ -148,4 +151,6 @@ __all__ = [
     "CBOR_CONVERTER",
     "save",
     "load",
+    "save_hash",
+    "load_hash",
 ]
