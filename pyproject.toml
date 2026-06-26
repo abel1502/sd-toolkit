@@ -11,6 +11,7 @@ requires-python = ">=3.14"
 authors = [
   { name = "abel1502" },
 ]
+# TODO: Move some stuff, like IPython, to extras
 dependencies = [
     "anyquests>=1.0.1",
     "anywidget>=0.11.0",
