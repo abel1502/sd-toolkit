@@ -1,8 +1,8 @@
 import typing
 import re
-import copy
 import functools
 import enum
+import contextlib
 
 import attrs
 from attrs import define, field
@@ -350,6 +350,14 @@ class Tags:
     
     def pipe[T](self, func: typing.Callable[[Tags], T]) -> T:
         return func(self)
+    
+    @contextlib.contextmanager
+    def temporary_changes(self) -> typing.Generator[typing.Self, None, None]:
+        backup = self.clone()
+        try:
+            yield self
+        finally:
+            self._tags = backup._tags
     
     def diff(self, old: TagsLike, *, flatten: bool = False) -> TagsDiff:
         from sd_toolkit.diff import TagsDiff
