@@ -38,7 +38,6 @@ dependencies = [
     "sqlitedict>=2.1.0",
     "tqdm>=4.67.3",
     "types-frozendict>=2.0.9",
-    "typing-extensions>=4.15.0",
     "xxhash>=3.7.1",
 ]
 classifiers = [

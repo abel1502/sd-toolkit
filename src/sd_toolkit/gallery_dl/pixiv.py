@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, HttpUrl
 
 from sd_toolkit.tags import Tag, Tags
+from sd_toolkit.metadata import tag_origin
 
 
 class ProfileImageUrls(BaseModel):
@@ -140,7 +141,7 @@ class PixivPost(BaseModel):
 def convert_pixiv_post(post: PixivPost) -> Tags:
     return Tags([
         Tag(tag.name).with_metadata(
-            origin="pixiv",
+            tag_origin.set("pixiv"),
         )
         for tag in post.tags
     ])

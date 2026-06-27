@@ -7,14 +7,13 @@ import contextlib
 import attrs
 from attrs import define, field
 from attrs.validators import instance_of, min_len
-import typing_extensions
-from frozendict import frozendict
 from nanotable import Table, SortedUniqueIndex, SortedMultiIndex, ConflictError
 import parsy
 from loguru import logger
 import pandas as pd
 import cachetools
 
+from sd_toolkit.metadata import Metadata, MetadataUpdate, tag_is_trigger, tag_category
 from sd_toolkit.storage import CBOR_CONVERTER
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import TagsDiff
@@ -29,31 +28,15 @@ def _convert_tag_path(path: tuple[str, ...] | str) -> tuple[str, ...]:
     return path
 
 
-def _convert_tag_metadata(metadata: typing.Mapping[str, typing.Any]) -> frozendict[str, typing.Any]:
-    return frozendict(metadata)
-
-
-# TODO: Rework metadata so that members are defined separately and accessed in a unified way.
-# This will allow defining default values and merging strategies on a per-member basis.
-# Note: merging strategies must be symmetrical. Either one value is more specific (or otherwise stronger) than the other,
-# they are equivalent, or they conflict.
-class TagMetadata(typing_extensions.TypedDict, total=False, closed=False):
-    category: typing.Literal["artist", "character", "copyright", "general", "meta"]
-    is_trigger: bool
-    origin: str
-    confidence: float
-
-
 @define(str=False, eq=True, order=False, frozen=True)
 class Tag:
     path: tuple[str, ...] = field(
         validator=[instance_of(tuple), min_len(1)],
         converter=_convert_tag_path,
     )
-    metadata: TagMetadata = field(
-        default=frozendict(),
-        validator=instance_of(frozendict),
-        converter=_convert_tag_metadata,
+    metadata: Metadata = field(
+        factory=Metadata,
+        validator=instance_of(Metadata),
     )
     
     @classmethod
@@ -77,24 +60,6 @@ class Tag:
     @functools.cached_property
     def tag(self) -> str:
         return self.path[-1]
-    
-    # TODO: cache the metadata as well?
-    
-    @property
-    def category(self) -> typing.Literal["artist", "character", "copyright", "general", "meta"] | None:
-        return self.metadata.get("category", None)
-    
-    @property
-    def is_trigger(self) -> bool:
-        return self.metadata.get("is_trigger", False)
-    
-    @property
-    def origin(self) -> str | None:
-        return self.metadata.get("origin", None)
-    
-    @property
-    def confidence(self) -> float:
-        return self.metadata.get("confidence", 1.0)
 
     def __str__(self) -> str:
         return self.tag
@@ -128,29 +93,8 @@ class Tag:
     def renamed(self, tag: str) -> Tag:
         return self.moved(self.parent_path + (tag,))
     
-    def with_metadata(self, /, **metadata: typing.Unpack[TagMetadata]) -> Tag:
-        return attrs.evolve(self, metadata=self.metadata | metadata)
-    
-    def strip_metadata(
-        self,
-        *,
-        keep: typing.Iterable[str] | None = None,
-        drop: typing.Iterable[str] | None = None,
-        drop_all: bool = False,
-    ) -> Tag:
-        keys: set[str] = set(self.metadata.keys())
-        
-        if drop_all:
-            if keep is not None or drop is not None:
-                raise ValueError("Cannot specify both `drop_all` and `keep` or `drop`")
-            keys = set()
-        else:
-            if keep is not None:
-                keys &= set(keep)
-            if drop is not None:
-                keys -= set(drop)
-        
-        return attrs.evolve(self, metadata={k: self.metadata[k] for k in keys})
+    def with_metadata(self, *updates: MetadataUpdate) -> Tag:
+        return attrs.evolve(self, metadata=self.metadata.update(*updates))
 
 
 type TagsLike = Tags | HierarchicalTagsDict | str | Tag | typing.Iterable[TagLike]
@@ -572,29 +516,28 @@ class Tags:
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
     ) -> typing.Self:
         return self.map(lambda tag: tag.moved((), parent_only=True) if pred(tag) else tag)
-    
-    def add_metadata(
+
+    def apply_metadata(
         self,
+        *updates: MetadataUpdate,
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
-        /,
-        **metadata: typing.Unpack[TagMetadata],
     ) -> typing.Self:
-        return self.map(lambda tag: tag.with_metadata(**metadata) if pred(tag) else tag)
+        return self.map(lambda tag: tag.with_metadata(*updates) if pred(tag) else tag)
     
     def clear_metadata(
         self,
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
     ) -> typing.Self:
-        return self.map(lambda tag: tag.strip_metadata(drop_all=True) if pred(tag) else tag)
+        return self.apply_metadata(Metadata.clear, pred=pred)
     
     def mark_trigger(
         self,
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
         clear_rest: bool = False,
     ) -> typing.Self:
-        self.add_metadata(pred, is_trigger=True)
+        self.apply_metadata(tag_is_trigger.set(True, existing="overwrite"), pred=pred)
         if clear_rest:
-            self.add_metadata(lambda tag: not pred(tag), is_trigger=False)
+            self.apply_metadata(tag_is_trigger.unset(), pred=pred)
         return self
     
     def filter(self, func: typing.Callable[[Tag], bool]) -> typing.Self:
@@ -796,7 +739,7 @@ class Tags:
     # TODO: convert_pixiv_to_booru. Query (and persistently cache!) the danbooru wiki, or optionally ask the user.
     
     def prefix_artist_tags(self) -> typing.Self:
-        return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag.metadata.get("category", "") == "artist" else tag)
+        return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag_category.of(tag) == "artist" else tag)
 
 
 @attrs.define(init=False, kw_only=True)

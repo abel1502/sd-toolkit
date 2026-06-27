@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, HttpUrl
 
 from sd_toolkit.tags import Tag, Tags
+from sd_toolkit.metadata import tag_category, tag_origin
 
 
 class Variant(BaseModel):
@@ -119,8 +120,8 @@ class DanbooruPost(BaseModel):
 def convert_danbooru_tags(post: DanbooruPost) -> Tags:
     return Tags([
         Tag(tag).with_metadata(
-            category=category,
-            origin="danbooru",
+            tag_category.set(category),
+            tag_origin.set("danbooru"),
         )
         for category, tags in [
             ("artist", post.tags_artist),

@@ -25,6 +25,7 @@ class TaggedImage:
     path: pathlib.Path
     tags: Tags
     full_metadata: typing.Any | None = None
+    # TODO: metadata: Metadata. Also rename full_metadata or make it a metadata field
 
 
 @define(repr=False)

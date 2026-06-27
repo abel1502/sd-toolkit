@@ -1018,7 +1018,6 @@ dependencies = [
     { name = "sqlitedict" },
     { name = "tqdm" },
     { name = "types-frozendict" },
-    { name = "typing-extensions" },
     { name = "xxhash" },
 ]
 
@@ -1056,7 +1055,6 @@ requires-dist = [
     { name = "sqlitedict", specifier = ">=2.1.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
     { name = "types-frozendict", specifier = ">=2.0.9" },
-    { name = "typing-extensions", specifier = ">=4.15.0" },
     { name = "xxhash", specifier = ">=3.7.1" },
 ]
 

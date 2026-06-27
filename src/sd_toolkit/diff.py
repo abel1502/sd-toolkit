@@ -9,25 +9,36 @@ from loguru import logger
 from functools import partial
 import itertools
 
-from sd_toolkit.tags import Tag, Tags, TagsLike, TagMetadata, TagFormatHook
+from sd_toolkit.tags import Tag, Tags, TagsLike, TagFormatHook
 from sd_toolkit.dataset import Dataset, TaggedImage
+from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate
 
 
-class DiffTagMetadata(TagMetadata, total=False):
-    added: bool
-    removed: bool
-    changed_metadata: bool
+tag_diff_added = MetadataField[bool](
+    "added",
+    bool,
+    default=False,
+)
+
+tag_diff_removed = MetadataField[bool](
+    "removed",
+    bool,
+    default=False,
+)
+
+tag_diff_changed_metadata = MetadataField[bool](
+    "changed_metadata",
+    bool,
+    default=False,
+)
 
 
-def _cast_md(md: TagMetadata) -> DiffTagMetadata:
-    return typing.cast(DiffTagMetadata, md)
-
-
-def _strip_diff_md(md: TagMetadata) -> TagMetadata:
-    md = dict(md)
-    for key in ("added", "removed", "changed_metadata"):
-        md.pop(key, None)
-    return md
+def _strip_diff_md(md: Metadata) -> Metadata:
+    return md.update(
+        tag_diff_added.unset(),
+        tag_diff_removed.unset(),
+        tag_diff_changed_metadata.unset(),
+    )
 
 
 @define(init=False, repr=False)
@@ -46,35 +57,29 @@ class TagsDiff:
             self.new.flatten()
         
         self.old.map(lambda tag: tag.with_metadata(
-            **self._compute_old_metdatada(tag),
+            *self._compute_old_metdatada(tag),
         ))
         self.new.map(lambda tag: tag.with_metadata(
-            **self._compute_new_metdatada(tag),
+            *self._compute_new_metdatada(tag),
         ))
     
-    def _compute_old_metdatada(self, old_tag: Tag) -> DiffTagMetadata:
-        result: DiffTagMetadata = {}
-        
+    def _compute_old_metdatada(self, old_tag: Tag) -> typing.Generator[MetadataUpdate, None, None]:
         new_tag = self.new.find_only_or(old_tag, None, match="path")
-        result["removed"] = new_tag is None
+        yield tag_diff_removed.set(new_tag is None)
         
         if new_tag is not None:
-            result["changed_metadata"] = \
+            yield tag_diff_changed_metadata.set(
                 _strip_diff_md(old_tag.metadata) != _strip_diff_md(new_tag.metadata)
-        
-        return result
+            )
     
-    def _compute_new_metdatada(self, new_tag: Tag) -> DiffTagMetadata:
-        result: DiffTagMetadata = {}
-        
+    def _compute_new_metdatada(self, new_tag: Tag) -> typing.Generator[MetadataUpdate, None, None]:
         old_tag = self.old.find_only_or(new_tag, None, match="path")
-        result["added"] = old_tag is None
+        yield tag_diff_added.set(old_tag is None)
         
         if old_tag is not None:
-            result["changed_metadata"] = \
+            yield tag_diff_changed_metadata.set(
                 _strip_diff_md(old_tag.metadata) != _strip_diff_md(new_tag.metadata)
-        
-        return result
+            )
     
     def pprint(
         self,
@@ -87,13 +92,12 @@ class TagsDiff:
         def formatter(tags: Tags) -> TagFormatHook:
             def _tag_format_hook(formatted: str, path: tuple[str, ...], children: Tags) -> str:
                 tag = tags.find_only(path, match="path")
-                md = _cast_md(tag.metadata)
                 
-                if md.get("added", False):
+                if tag.metadata[tag_diff_added]:
                     formatted = f"[green]+{formatted}[/]"
-                elif md.get("removed", False):
+                elif tag.metadata[tag_diff_removed]:
                     formatted = f"[red]-{formatted}[/]"
-                elif md.get("changed_metadata", False):
+                elif tag.metadata[tag_diff_changed_metadata]:
                     formatted = f"[yellow]~{formatted}[/]"
                 
                 return formatted
@@ -102,7 +106,7 @@ class TagsDiff:
         
         result: str
         if inline:
-            combined = self.new.clone().add(self.old.filter(lambda tag: _cast_md(tag.metadata).get("removed", False)))
+            combined = self.new.clone().add(self.old.clone().filter(lambda tag: tag.metadata[tag_diff_removed]))
             
             result = combined.to_hierarchical_str(
                 indent=indent,
@@ -137,6 +141,7 @@ class TagsDiff:
 class DatasetDiff:
     old: Dataset
     new: Dataset
+    # TODO: Use image metadata?
     _all_images: dict[pathlib.Path, tuple[TaggedImage | None, TaggedImage | None]]
     
     def __init__(self, old: Dataset, new: Dataset, *, flatten_tags: bool = False):
