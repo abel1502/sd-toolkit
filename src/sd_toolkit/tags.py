@@ -795,8 +795,9 @@ class TagsView(Tags):
     _initial: Tags = attrs.field(validator=instance_of(Tags))
     
     def __init__(self, *, base: Tags, initial: Tags):
+        # Skips the base constructor, unfortunately, but that's the best I could think of
         self.__attrs_init__(
-            initial.clone(),
+            tags=initial.clone()._tags,
             base=base,
             initial=initial,
         )

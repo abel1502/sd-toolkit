@@ -263,6 +263,9 @@ class TaggerWidget(anywidget.AnyWidget):
                 image.tags.promote_hierarchy(combined_tags)
         
         if saved_choices is not None:
+            if isinstance(saved_choices, str):
+                saved_choices = pathlib.Path(saved_choices)
+            
             self._choices = SavedChoices.load_or_create(saved_choices, combined_tags)
             self._saved_choices_path = pathlib.Path(saved_choices)
             
