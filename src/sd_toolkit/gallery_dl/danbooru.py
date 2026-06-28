@@ -3,8 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, HttpUrl
 
-from sd_toolkit.tags import Tag, Tags
-from sd_toolkit.metadata import tag_category, tag_origin
+from sd_toolkit.gallery_dl.base import BaseGalleryDLPost
+from sd_toolkit.tags import Tag, TagsLike, tag_category
 
 
 class Variant(BaseModel):
@@ -32,7 +32,7 @@ class MediaAsset(BaseModel):
     variants: list[Variant]
 
 
-class DanbooruPost(BaseModel):
+class DanbooruPost(BaseGalleryDLPost, name="danbooru"):
     id: int
     created_at: datetime
     uploader_id: int
@@ -115,26 +115,24 @@ class DanbooruPost(BaseModel):
     search_tags: str
     category: str
     subcategory: str
-
-
-def convert_danbooru_tags(post: DanbooruPost) -> Tags:
-    return Tags([
-        Tag(tag).with_metadata(
-            tag_category.set(category),
-            tag_origin.set("danbooru"),
-        )
-        for category, tags in [
-            ("artist", post.tags_artist),
-            ("character", post.tags_character),
-            ("copyright", post.tags_copyright),
-            ("general", post.tags_general),
-            ("meta", post.tags_meta),
+    
+    @typing.override
+    def _extract_tags(self) -> TagsLike:
+        return [
+            Tag(tag).with_metadata(
+                tag_category.set(category),
+            )
+            for category, tags in [
+                ("artist", self.tags_artist),
+                ("character", self.tags_character),
+                ("copyright", self.tags_copyright),
+                ("general", self.tags_general),
+                ("meta", self.tags_meta),
+            ]
+            for tag in tags
         ]
-        for tag in tags
-    ])
 
 
 __all__ = [
     "DanbooruPost",
-    "convert_danbooru_tags",
 ]

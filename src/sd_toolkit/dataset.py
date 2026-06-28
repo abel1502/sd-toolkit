@@ -11,21 +11,34 @@ import contextlib
 from loguru import logger
 import attrs
 from attrs import define, field
-from pydantic import BaseModel
 
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import save, load
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import DatasetDiff
+from sd_toolkit.metadata import Metadata, MetadataUpdate, MetadataField
+from sd_toolkit.gallery_dl import BaseGalleryDLPost
 
 
 @define()
 class TaggedImage:
     path: pathlib.Path
     tags: Tags
-    full_metadata: typing.Any | None = None
-    # TODO: metadata: Metadata. Also rename full_metadata or make it a metadata field
+    metadata: Metadata = field(factory=Metadata)
+    
+    def apply_metadata(self, *updates: typing.Callable[[Metadata], MetadataUpdate]) -> typing.Self:
+        self.metadata = self.metadata.update(*updates)
+        return self
+    
+    def clear_metadata(self) -> typing.Self:
+        return self.apply_metadata(Metadata.clear)
+
+
+img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
+    "gallery_dl_post",
+    BaseGalleryDLPost,
+)
 
 
 @define(repr=False)
@@ -90,7 +103,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         root: pathlib.Path | str,
         *,
         tag_separator: str = ",",
-        recurse: bool = False,
+        recurse: bool = True,
     ) -> Dataset:
         if isinstance(root, str):
             root = pathlib.Path(root)
@@ -126,14 +139,13 @@ class Dataset(typing.Sequence[TaggedImage]):
         )
     
     @classmethod
-    def load_gallery_dl[T: BaseModel](
+    def load_gallery_dl(
         cls,
         root: pathlib.Path | str,
-        metadata_model: typing.Type[T],
-        tags_from_metadata: typing.Callable[[T], TagsLike],
+        metadata_model: typing.Type[BaseGalleryDLPost],
         *,
         save_full_metadata: bool = False,
-        recurse: bool = False,
+        recurse: bool = True,
     ) -> Dataset:
         if isinstance(root, str):
             root = pathlib.Path(root)
@@ -145,13 +157,16 @@ class Dataset(typing.Sequence[TaggedImage]):
             assert metadata_file.is_file()
             
             metadata = metadata_model.model_validate_json(metadata_file.read_text())
-            tags = Tags.cast(tags_from_metadata(metadata))
             
-            contents.append(TaggedImage(
+            image = TaggedImage(
                 path=img_file,
-                tags=tags,
-                full_metadata=metadata if save_full_metadata else None,
-            ))
+                tags=metadata.extract_tags(),
+            )
+            
+            if save_full_metadata:
+                image.apply_metadata(img_gallery_dl_post.set(metadata))
+            
+            contents.append(image)
         
         logger.info(f"Loaded a dataset of {len(contents)} images")
         
@@ -403,4 +418,5 @@ attrs.resolve_types(Dataset)
 __all__ = [
     "Dataset",
     "TaggedImage",
+    "img_gallery_dl_post",
 ]

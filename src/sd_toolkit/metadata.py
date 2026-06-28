@@ -14,7 +14,7 @@ class _HasMetadata(typing.Protocol):
     metadata: Metadata
 
 
-@define(init=False)
+@define(init=False, frozen=True)
 class MetadataField[ValueT]:
     REGISTRY: typing.ClassVar[dict[str, MetadataField]] = {}
     
@@ -40,7 +40,7 @@ class MetadataField[ValueT]:
             raise ValueError(f"MetadataField with key {key} already exists: {other!r}")
         
         if default is not None and not callable(default):
-            default = lambda: default
+            default = lambda result=default: result
         
         if isinstance(merge, str):
             match merge:
@@ -113,7 +113,7 @@ class MetadataField[ValueT]:
         
         return obj.get(self, default)
     
-    def set(self, value: ValueT, *, existing: typing.Literal["raise", "merge", "overwrite"] = "raise") -> MetadataUpdate:
+    def set(self, value: ValueT, *, existing: typing.Literal["raise", "merge", "overwrite"] = "overwrite") -> MetadataUpdate:
         return lambda metadata: metadata.set(self, value, existing=existing)
     
     def unset(self) -> MetadataUpdate:
@@ -157,7 +157,7 @@ class Metadata:
         missing = object()
         result = self.get(field, missing)
         if result is missing:
-            raise ValueError(f"Metadata field {field!r} not found in {self!r}")
+            raise ValueError(f"Metadata field {field.key!r} not found in {self!r}")
         return result
     
     def has[ValueT](self, field: MetadataField[ValueT]) -> bool:
@@ -177,10 +177,10 @@ class Metadata:
         
         return self.has(field)
     
-    def set[ValueT](self, field: MetadataField[ValueT], value: ValueT, *, existing: typing.Literal["raise", "merge", "overwrite"]) -> Metadata:
+    def set[ValueT](self, field: MetadataField[ValueT], value: ValueT, *, existing: typing.Literal["raise", "merge", "overwrite"] = "overwrite") -> Metadata:
         if self.has(field):
             if existing == "raise":
-                raise ValueError(f"Metadata field {field!r} already exists in {self!r}")
+                raise ValueError(f"Metadata field {field.key!r} already exists in {self!r}")
             if existing == "merge":
                 value = field.merge(self[field], value)
         
@@ -254,43 +254,8 @@ def _unstructure_Metadata(data: Metadata) -> dict[str, typing.Any]:
     return result
 
 
-# Predefined metadata fields
-
-tag_category = MetadataField[typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"]](
-    "tag_category",
-    typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"],
-    default="unknown",
-    merge="beat_default",
-)
-
-tag_is_trigger = MetadataField[bool](
-    "tag_is_trigger",
-    bool,
-    default=False,
-    merge="beat_default",
-)
-
-tag_origin = MetadataField[str](
-    "origin",
-    str,
-    default="unknown",
-    merge="beat_default",
-)
-
-tag_confidence = MetadataField[float](
-    "tag_confidence",
-    float,
-    default=1.0,
-    merge=lambda old, new: max(old, new),
-)
-
-
 __all__ = [
     "Metadata",
     "MetadataField",
     "MetadataUpdate",
-    "tag_category",
-    "tag_is_trigger",
-    "tag_origin",
-    "tag_confidence",
 ]

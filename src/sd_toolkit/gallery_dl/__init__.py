@@ -1,10 +1,10 @@
-from .danbooru import DanbooruPost, convert_danbooru_tags
-from .pixiv import PixivPost, convert_pixiv_post
+from .base import BaseGalleryDLPost
+from .danbooru import DanbooruPost
+from .pixiv import PixivPost
 
 
 __all__ = [
+    "BaseGalleryDLPost",
     "DanbooruPost",
-    "convert_danbooru_tags",
     "PixivPost",
-    "convert_pixiv_post",
 ]

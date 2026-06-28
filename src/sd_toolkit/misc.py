@@ -1,6 +1,7 @@
 import typing
 
 
+# TODO: Move to widget.py?
 def ipython_show_multiline_strings() -> None:
     """
     Makes Jupyter output render multiline strings without `repr`-ing them.

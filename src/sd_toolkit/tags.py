@@ -13,7 +13,7 @@ from loguru import logger
 import pandas as pd
 import cachetools
 
-from sd_toolkit.metadata import Metadata, MetadataUpdate, tag_is_trigger, tag_category
+from sd_toolkit.metadata import Metadata, MetadataUpdate, MetadataField
 from sd_toolkit.storage import CBOR_CONVERTER
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import TagsDiff
@@ -95,6 +95,35 @@ class Tag:
     
     def with_metadata(self, *updates: MetadataUpdate) -> Tag:
         return attrs.evolve(self, metadata=self.metadata.update(*updates))
+
+
+tag_category = MetadataField[typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"]](
+    "tag_category",
+    typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"],
+    default="unknown",
+    merge="beat_default",
+)
+
+tag_is_trigger = MetadataField[bool](
+    "tag_is_trigger",
+    bool,
+    default=False,
+    merge="beat_default",
+)
+
+tag_origin = MetadataField[str](
+    "origin",
+    str,
+    default="unknown",
+    merge="beat_default",
+)
+
+tag_confidence = MetadataField[float](
+    "tag_confidence",
+    float,
+    default=1.0,
+    merge=lambda old, new: max(old, new),
+)
 
 
 type TagsLike = Tags | HierarchicalTagsDict | str | Tag | typing.Iterable[TagLike]
@@ -1018,8 +1047,11 @@ _HIERARCHICAL_TAGS_PARSER: typing.Final[parsy.Parser[str, Tags]] = _define_parse
 
 __all__ = [
     "TagLike",
-    "TagMetadata",
     "Tag",
+    "tag_category",
+    "tag_is_trigger",
+    "tag_origin",
+    "tag_confidence",
     "TagsLike",
     "TagMatch",
     "Tags",

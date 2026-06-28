@@ -3,8 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, HttpUrl
 
-from sd_toolkit.tags import Tag, Tags
-from sd_toolkit.metadata import tag_origin
+from sd_toolkit.gallery_dl.base import BaseGalleryDLPost
+from sd_toolkit.tags import Tag, TagsLike
 
 
 class ProfileImageUrls(BaseModel):
@@ -79,7 +79,7 @@ class Workspace(BaseModel):
 
 
 # TODO: Clarify untyped `dict`s based on examples when they become available
-class PixivPost(BaseModel):
+class PixivPost(BaseGalleryDLPost, name="pixiv"):
     id: int
     title: str
     type: str
@@ -136,13 +136,15 @@ class PixivPost(BaseModel):
 
     date_url: str
     hash: str
+    
+    @typing.override
+    def extract_tags(self) -> TagsLike:
+        return [
+            Tag(tag.name)
+            for tag in self.tags
+        ]
 
 
-def convert_pixiv_post(post: PixivPost) -> Tags:
-    return Tags([
-        Tag(tag.name).with_metadata(
-            tag_origin.set("pixiv"),
-        )
-        for tag in post.tags
-    ])
-
+__all__ = [
+    "PixivPost",
+]
