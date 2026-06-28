@@ -111,6 +111,74 @@ class TagGroup:
             yield from subgroup.flatten(level + 1)
 
 
+@define()
+class SavedChoices:
+    _tags: Tags = field(converter=Tags.cast)
+    # image path -> bitmap of tag choices (bit i = presence of tag #i)
+    _image_choices: dict[pathlib.Path, int] = field(factory=dict)
+    
+    @classmethod
+    def load(cls, path: pathlib.Path | str) -> SavedChoices:
+        return load(SavedChoices, path)
+    
+    @classmethod
+    def load_or_create(cls, path: pathlib.Path | str, tags: TagsLike) -> SavedChoices:
+        tags = Tags.cast(tags)
+        
+        if not path.is_file():
+            return cls(tags=tags)
+        
+        result = cls.load(path)
+        if result._tags != tags:
+            raise ValueError(f"Saved choices in {path} assume different tags", result._tags, tags)
+        
+        return result
+    
+    def save(self, path: pathlib.Path | str) -> None:
+        return save(self, path, overwrite=True)
+    
+    def apply(self, image: TaggedImage) -> bool:
+        """
+        :returns: True if the image had a saved choice (in which case it was applied)
+        """
+        
+        logger.debug(f"Applying saved tag choices for {image.path}")
+        
+        choices_bitmask: int | None = self._image_choices.get(image.path)
+        if choices_bitmask is None:
+            return False
+        
+        image.tags.view(lambda tag: tag in self._tags).clear().add((
+            tag for i, tag
+            in enumerate(self._tags)
+            if (choices_bitmask >> i) & 1
+        ), match="path").apply()
+        
+        return True
+    
+    def record(self, image: TaggedImage) -> bool:
+        """
+        :returns: True if the choices for the image were different than the already recorded ones
+            (i.e. new choices should be saved to disk).
+        """
+        
+        logger.debug(f"Recording tag choices for {image.path}")
+        
+        choices_bitmask: int = functools.reduce(
+            lambda x, y: x | y,
+            (
+                1 << i for i, tag
+                in enumerate(self._tags)
+                if image.tags.has(tag.path, match="path")
+            ),
+            0,
+        )
+        
+        old_choices_bitmask: int | None = self._image_choices.get(image.path, None)
+        self._image_choices[image.path] = choices_bitmask
+        return old_choices_bitmask != choices_bitmask
+
+
 def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
     return dict(
         to_json=lambda obj, manager: cattrs.unstructure(obj),
@@ -393,74 +461,6 @@ class TaggerWidget(anywidget.AnyWidget):
     )
     def _read_image(self, path: pathlib.Path) -> bytes:
         return path.read_bytes()
-
-
-@define()
-class SavedChoices:
-    _tags: Tags = field(converter=Tags.cast)
-    # image path -> bitmap of tag choices (bit i = presence of tag #i)
-    _image_choices: dict[pathlib.Path, int] = field(factory=dict)
-    
-    @classmethod
-    def load(cls, path: pathlib.Path | str) -> SavedChoices:
-        return load(SavedChoices, path)
-    
-    @classmethod
-    def load_or_create(cls, path: pathlib.Path | str, tags: TagsLike) -> SavedChoices:
-        tags = Tags.cast(tags)
-        
-        if not path.is_file():
-            return cls(tags=tags)
-        
-        result = cls.load(path)
-        if result._tags != tags:
-            raise ValueError(f"Saved choices in {path} assume different tags", result._tags, tags)
-        
-        return result
-    
-    def save(self, path: pathlib.Path | str) -> None:
-        return save(self, path, overwrite=True)
-    
-    def apply(self, image: TaggedImage) -> bool:
-        """
-        :returns: True if the image had a saved choice (in which case it was applied)
-        """
-        
-        logger.debug(f"Applying saved tag choices for {image.path}")
-        
-        choices_bitmask: int | None = self._image_choices.get(image.path)
-        if choices_bitmask is None:
-            return False
-        
-        image.tags.view(lambda tag: tag in self._tags).clear().add((
-            tag for i, tag
-            in enumerate(self._tags)
-            if (choices_bitmask >> i) & 1
-        ), match="path").apply()
-        
-        return True
-    
-    def record(self, image: TaggedImage) -> bool:
-        """
-        :returns: True if the choices for the image were different than the already recorded ones
-            (i.e. new choices should be saved to disk).
-        """
-        
-        logger.debug(f"Recording tag choices for {image.path}")
-        
-        choices_bitmask: int = functools.reduce(
-            lambda x, y: x | y,
-            (
-                1 << i for i, tag
-                in enumerate(self._tags)
-                if image.tags.has(tag.path, match="path")
-            ),
-            0,
-        )
-        
-        old_choices_bitmask: int | None = self._image_choices.get(image.path, None)
-        self._image_choices[image.path] = choices_bitmask
-        return old_choices_bitmask != choices_bitmask
 
 
 __all__ = [
