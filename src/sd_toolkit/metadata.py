@@ -14,6 +14,9 @@ class _HasMetadata(typing.Protocol):
     metadata: Metadata
 
 
+type MetadataExisting = typing.Literal["raise", "merge", "overwrite"]
+
+
 @define(init=False, frozen=True)
 class MetadataField[ValueT]:
     REGISTRY: typing.ClassVar[dict[str, MetadataField]] = {}
@@ -113,7 +116,7 @@ class MetadataField[ValueT]:
         
         return obj.get(self, default)
     
-    def set(self, value: ValueT, *, existing: typing.Literal["raise", "merge", "overwrite"] = "overwrite") -> MetadataUpdate:
+    def set(self, value: ValueT, *, existing: MetadataExisting = "overwrite") -> MetadataUpdate:
         return lambda metadata: metadata.set(self, value, existing=existing)
     
     def unset(self) -> MetadataUpdate:
@@ -177,7 +180,7 @@ class Metadata:
         
         return self.has(field)
     
-    def set[ValueT](self, field: MetadataField[ValueT], value: ValueT, *, existing: typing.Literal["raise", "merge", "overwrite"] = "overwrite") -> Metadata:
+    def set[ValueT](self, field: MetadataField[ValueT], value: ValueT, *, existing: MetadataExisting = "overwrite") -> Metadata:
         if self.has(field):
             if existing == "raise":
                 raise ValueError(f"Metadata field {field.key!r} already exists in {self!r}")
@@ -258,4 +261,5 @@ __all__ = [
     "Metadata",
     "MetadataField",
     "MetadataUpdate",
+    "MetadataExisting",
 ]
