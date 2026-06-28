@@ -190,7 +190,7 @@ _Callback = typing.Callable[[typing.Mapping[str, typing.Any]], typing.Any]
 
 
 class TaggerWidget(anywidget.AnyWidget):
-    _esm = STATIC / "index.js"
+    _esm = STATIC / "tagger.js"
     _css = STATIC / "styles.css"
     
     # Input traitlets
@@ -382,6 +382,11 @@ class TaggerWidget(anywidget.AnyWidget):
             image.tags.remove(event.path, match="path")
         
         self._refresh_tags()
+        
+        # TODO: ?
+        tags_changed = self._choices.record(image)
+        if tags_changed and self._saved_choices_path is not None:
+            self._choices.save(self._saved_choices_path)
     
     def _do_toggle_group(self, event: ToggleGroupMessage) -> None:
         logger.debug(f"Toggle group {event}")
@@ -397,16 +402,17 @@ class TaggerWidget(anywidget.AnyWidget):
             image.tags.remove(group_tags, match="path")
         
         self._refresh_tags()
+        
+        # TODO: ?
+        tags_changed = self._choices.record(image)
+        if tags_changed and self._saved_choices_path is not None:
+            self._choices.save(self._saved_choices_path)
     
     def _do_switch_image(self, event: SwitchImageMessage) -> None:
         logger.debug(f"Switch image {event}")
         
         with self.hold_sync():
             prev_image = self.current_image
-            if prev_image is not None:
-                tags_changed = self._choices.record(prev_image)
-                if tags_changed and self._saved_choices_path is not None:
-                    self._choices.save(self._saved_choices_path)
             
             if event.idx in range(self.image_count):
                 self.load_image(event.idx)
@@ -414,6 +420,11 @@ class TaggerWidget(anywidget.AnyWidget):
                 # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
                 self.image = ""
                 self.image_idx = event.idx
+        
+        if prev_image is not None:
+            tags_changed = self._choices.record(prev_image)
+            if tags_changed and self._saved_choices_path is not None:
+                self._choices.save(self._saved_choices_path)
     
     def _refresh_tags(self) -> None:
         image = self.current_image
