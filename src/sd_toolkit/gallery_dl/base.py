@@ -10,7 +10,7 @@ from sd_toolkit.tags import Tags, TagsLike, tag_origin
 
 class BaseGalleryDLPost(BaseModel, ABC):
     ORIGIN_NAME: typing.ClassVar[typing.Final[str | None]] = None
-    REGISTRY: typing.ClassVar[typing.Final[dict[str, BaseGalleryDLPost]]] = {}
+    REGISTRY: typing.ClassVar[typing.Final[dict[str, typing.Type[BaseGalleryDLPost]]]] = {}
     
     def __init_subclass__(cls, *, name: str | None = None, **kwargs) -> None:
         cls.ORIGIN_NAME = name

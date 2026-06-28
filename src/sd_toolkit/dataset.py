@@ -142,7 +142,7 @@ class Dataset(typing.Sequence[TaggedImage]):
     def load_gallery_dl(
         cls,
         root: pathlib.Path | str,
-        metadata_model: typing.Type[BaseGalleryDLPost],
+        post_type: typing.Type[BaseGalleryDLPost] | str,
         *,
         save_full_metadata: bool = False,
         recurse: bool = True,
@@ -150,21 +150,27 @@ class Dataset(typing.Sequence[TaggedImage]):
         if isinstance(root, str):
             root = pathlib.Path(root)
         
+        if isinstance(post_type, str):
+            if post_type not in BaseGalleryDLPost.REGISTRY:
+                raise ValueError(f"Unknown post type name {post_type!r}. Available types: {', '.join(f"{x!r}" for x in BaseGalleryDLPost.REGISTRY.keys())}")
+            
+            post_type = BaseGalleryDLPost.REGISTRY[post_type]
+        
         contents: list[TaggedImage] = []
         
         for img_file in cls.discover_files(root, ext_re=cls._IMAGE_FILE_EXT, recurse=recurse):
             metadata_file = img_file.with_name(img_file.name + ".json")
             assert metadata_file.is_file()
             
-            metadata = metadata_model.model_validate_json(metadata_file.read_text())
+            post = post_type.model_validate_json(metadata_file.read_text())
             
             image = TaggedImage(
                 path=img_file,
-                tags=metadata.extract_tags(),
+                tags=post.extract_tags(),
             )
             
             if save_full_metadata:
-                image.apply_metadata(img_gallery_dl_post.set(metadata))
+                image.apply_metadata(img_gallery_dl_post.set(post))
             
             contents.append(image)
         

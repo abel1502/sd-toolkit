@@ -148,7 +148,7 @@ def _structure_object_data_type(value: typing.Any, _: type[ObjectDataType]) -> O
     raise TypeError(f"Cannot structure ObjectDataType from {type(value)!r}")
 
 
-
+# TODO: Use and expose
 class BDTMAPIClient:
     base_url: str
     session: requests.Session

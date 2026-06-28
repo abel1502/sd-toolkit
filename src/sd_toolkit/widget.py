@@ -393,8 +393,6 @@ class TaggerWidget(anywidget.AnyWidget):
     )
     def _read_image(self, path: pathlib.Path) -> bytes:
         return path.read_bytes()
-    
-    # TODO: Load saved choices when loading an image. Save them whenever the user switches to a new image. Identity can be the path. Skip done images (can filter the input in the constructor), unless the user passes a redo flag or something.
 
 
 @define()
