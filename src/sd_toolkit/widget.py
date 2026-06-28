@@ -465,4 +465,5 @@ class TaggerWidget(anywidget.AnyWidget):
 
 __all__ = [
     "TaggerWidget",
+    "TagGroup",
 ]

@@ -12,6 +12,7 @@ import functools
 from loguru import logger
 import attrs
 from attrs import define, field
+import ipywidgets
 
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
@@ -34,6 +35,9 @@ class TaggedImage:
     
     def clear_metadata(self) -> typing.Self:
         return self.apply_metadata(Metadata.clear)
+    
+    def preview(self) -> ipywidgets.Image:
+        return ipywidgets.Image(value=self.path.read_bytes())
 
 
 img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
@@ -390,10 +394,18 @@ class Dataset(typing.Sequence[TaggedImage]):
 
     # TODO: More tags accessor(s)
     def all_tags(self) -> Tags:
+        """
+        .. Note::
+            This clears tag metadata (for now). If you need it intact, consider using `iter_tags` instead
+        """
         tags = Tags()
         for img in self.contents:
-            tags.add(img.tags.flatten().clear_metadata())
+            tags.add(img.tags.clone().flatten().clear_metadata())  # TODO: Merge metadata instead?
         return tags
+    
+    def iter_tags(self) -> typing.Generator[Tag, None, None]:
+        for img in self.contents:
+            yield from img.tags
     
     def tag_frequencies(
         self,
