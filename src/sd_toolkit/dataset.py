@@ -7,6 +7,7 @@ import collections
 import math
 import itertools
 import contextlib
+import functools
 
 from loguru import logger
 import attrs
@@ -302,6 +303,42 @@ class Dataset(typing.Sequence[TaggedImage]):
         for field in attrs.fields(Dataset):
             field: attrs.Attribute
             setattr(self, field.name, getattr(other, field.name))
+    
+    @typing.overload
+    @classmethod
+    def compute_checkpointed(
+        cls,
+        path: pathlib.Path | str,
+        generator: typing.Callable[[], Dataset],
+    ) -> Dataset:
+        ...
+    
+    @typing.overload
+    @classmethod
+    def compute_checkpointed(
+        cls,
+        path: pathlib.Path | str,
+    ) -> typing.Callable[[typing.Callable[[], Dataset]], Dataset]:
+        ...
+    
+    @classmethod
+    def compute_checkpointed(
+        cls,
+        path: pathlib.Path | str,
+        generator: typing.Callable[[], Dataset] | None = None,
+    ):
+        if generator is None:
+            return functools.partial(cls.compute_checkpointed, path)
+        
+        if isinstance(path, str):
+            path = pathlib.Path(path)
+        
+        if path.exists():
+            return cls.load_checkpoint(path)
+        
+        result = generator()
+        result.save_checkpoint(path)
+        return result
     
     @contextlib.contextmanager
     def temporary_changes(self) -> typing.Generator[typing.Self, None, None]:
