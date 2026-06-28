@@ -2,10 +2,13 @@
   import type { AnyModel } from "@anywidget/types";
   import { Confetti } from "svelte-confetti";
   import { slide } from "svelte/transition";
-  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent } from "./types";
+  import ArrowsReload01 from "@iconify-svelte/ci/arrows-reload-01";
+  import MagnifyingGlassPlus from "@iconify-svelte/ci/magnifying-glass-plus";
+  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent, RevertImageEvent, ViewImageEvent } from "./types";
   import TagsPanel from "./TagsPanel.svelte";
   import NavBar from "./NavBar.svelte";
   import HotkeyBar from "./HotkeyBar.svelte";
+  import ImagePreview from "./ImagePreview.svelte";
 
   // TODO:
   // - Show when an image was already handled (a checkmark?)
@@ -18,11 +21,15 @@
     tag_groups: TagGroupInfo[];
     image_idx: number;
     image_count: number;
+    image_saved: boolean;
 
     // Output only
+    // TODO: Replace with messages?
     toggle_tag: ToggleTagEvent | null;
     toggle_group: ToggleGroupEvent | null;
     switch_image: SwitchImageEvent | null;
+    revert_image: RevertImageEvent | null;
+    view_image: ViewImageEvent | null;
   }
 
   interface Props {
@@ -36,6 +43,7 @@
   let tagGroups = $derived(bindings?.tag_groups || []);
   let curImageIdx = $derived(bindings?.image_idx || 0);
   let totalImages = $derived(bindings?.image_count || 0);
+  let imageSaved = $derived(bindings?.image_saved || false);
 
   let is_done = $derived(curImageIdx == totalImages);
 
@@ -70,6 +78,20 @@
     goToImage({ idx: curImageIdx - 1 });
   }
 
+  function revertImage() {
+    // TODO: Add a spinner while waiting for updates from python somehow?
+    if (!bindings) return;
+
+    bindings.revert_image = {};
+  }
+
+  function viewImage() {
+    // TODO: Add a spinner while waiting for updates from python somehow?
+    if (!bindings) return;
+
+    bindings.view_image = {};
+  }
+
   let width: number | undefined = $state()
 </script>
 
@@ -87,13 +109,18 @@
     </div>
   {:else}
     <div class="flex flex-row gap-6 resize-y min-h-48 h-64 overflow-hidden" transition:slide>
-      <div class="grid place-items-center h-full max-h-[35vw] aspect-square bg-gray-100 rounded-lg border border-gray-300 overflow-hidden">
-        {#if image}
-          <img src={image} alt="Preview" class="w-full h-full object-contain aspect-square"/>
-        {:else}
-          <span class="text-gray-400 text-sm text-center">No Image</span>
-        {/if}
-      </div>
+      <ImagePreview class="h-full max-h-[35vw]" {image} {imageSaved} buttons={[
+        {
+          icon: ArrowsReload01,
+          title: "Reset image tags",
+          onclick: revertImage,
+        },
+        {
+          icon: MagnifyingGlassPlus,
+          title: "Open in external viewer",
+          onclick: viewImage,
+        }
+      ]} />
       
       <div class="flex-1 py-1 overflow-y-auto scrollbar-hidden">
         <TagsPanel {tagGroups} {toggleGroup} {toggleTag} />

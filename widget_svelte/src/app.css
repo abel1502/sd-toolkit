@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
+button {
+  @apply not-disabled:cursor-pointer;
+}
+
 .tag-btn {
-  @apply transition-colors duration-100 not-disabled:cursor-pointer;
+  @apply transition-colors duration-100;
 }
 
 .tag-btn--on {

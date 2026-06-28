@@ -5,6 +5,9 @@ import re
 import itertools
 import mimetypes
 import functools
+import platform
+import os
+import subprocess
 
 import anywidget
 import traitlets
@@ -50,6 +53,14 @@ class ToggleGroupMessage:
 @define
 class SwitchImageMessage:
     idx: int
+
+@define
+class RevertImageMessage:
+    pass
+
+@define
+class ViewImageMessage:
+    pass
 
 
 attrs.resolve_types(TagGroupInfo)
@@ -177,6 +188,9 @@ class SavedChoices:
         old_choices_bitmask: int | None = self._image_choices.get(image.path, None)
         self._image_choices[image.path] = choices_bitmask
         return old_choices_bitmask != choices_bitmask
+    
+    def has(self, image: TaggedImage) -> bool:
+        return image.path in self._image_choices
 
 
 def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
@@ -195,6 +209,7 @@ class TaggerWidget(anywidget.AnyWidget):
     
     # Input traitlets
     image: str = traitlets.Unicode("").tag(sync=True)
+    image_saved: bool = traitlets.Bool(False).tag(sync=True)
     tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List([]).tag(
         sync=True,
         **_use_cattrs(typing.Sequence[TagGroupInfo]),
@@ -203,17 +218,26 @@ class TaggerWidget(anywidget.AnyWidget):
     image_count: int = traitlets.Int(0).tag(sync=True)
     
     # Output traitlets
-    toggle_tag: ToggleTagMessage = traitlets.Any(None).tag(
+    # TODO: Replace with messages?
+    toggle_tag: ToggleTagMessage | None = traitlets.Any(None).tag(
         sync=True,
         **_use_cattrs(ToggleTagMessage),
     )
-    toggle_group: ToggleGroupMessage = traitlets.Any(None).tag(
+    toggle_group: ToggleGroupMessage | None = traitlets.Any(None).tag(
         sync=True,
         **_use_cattrs(ToggleGroupMessage),
     )
-    switch_image: SwitchImageMessage = traitlets.Any(None).tag(
+    switch_image: SwitchImageMessage | None = traitlets.Any(None).tag(
         sync=True,
         **_use_cattrs(SwitchImageMessage),
+    )
+    revert_image: RevertImageMessage | None = traitlets.Any(None).tag(
+        sync=True,
+        **_use_cattrs(RevertImageMessage),
+    )
+    view_image: ViewImageMessage | None = traitlets.Any(None).tag(
+        sync=True,
+        **_use_cattrs(ViewImageMessage),
     )
     
     _dataset: typing.Sequence[TaggedImage]
@@ -296,7 +320,7 @@ class TaggerWidget(anywidget.AnyWidget):
         
         self.load_image(0)
         
-        self.observe(out_capture(self._on_change), names=["toggle_tag", "toggle_group", "switch_image"])
+        self.observe(out_capture(self._on_change), names=["toggle_tag", "toggle_group", "switch_image", "revert_image", "view_image"])
     
     @staticmethod
     def _convert_groups(
@@ -364,6 +388,10 @@ class TaggerWidget(anywidget.AnyWidget):
                 self._do_toggle_group(change["new"])
             case "switch_image":
                 self._do_switch_image(change["new"])
+            case "revert_image":
+                self._do_revert_image(change["new"])
+            case "view_image":
+                self._do_view_image(change["new"])
             case _:
                 assert False
         
@@ -377,16 +405,12 @@ class TaggerWidget(anywidget.AnyWidget):
         assert image is not None
         
         if event.present:
-            image.tags.add(event.path, match="path")
+            image.tags.add([event.path], match="path")
         else:
-            image.tags.remove(event.path, match="path")
+            image.tags.remove([event.path], match="path")
         
         self._refresh_tags()
-        
-        # TODO: ?
-        tags_changed = self._choices.record(image)
-        if tags_changed and self._saved_choices_path is not None:
-            self._choices.save(self._saved_choices_path)
+        self._record_choices(image)
     
     def _do_toggle_group(self, event: ToggleGroupMessage) -> None:
         logger.debug(f"Toggle group {event}")
@@ -402,11 +426,7 @@ class TaggerWidget(anywidget.AnyWidget):
             image.tags.remove(group_tags, match="path")
         
         self._refresh_tags()
-        
-        # TODO: ?
-        tags_changed = self._choices.record(image)
-        if tags_changed and self._saved_choices_path is not None:
-            self._choices.save(self._saved_choices_path)
+        self._record_choices(image)
     
     def _do_switch_image(self, event: SwitchImageMessage) -> None:
         logger.debug(f"Switch image {event}")
@@ -420,11 +440,32 @@ class TaggerWidget(anywidget.AnyWidget):
                 # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
                 self.image = ""
                 self.image_idx = event.idx
+                self.image_saved = False
         
+        # TODO: Should apply when advancing to next image after looking, but not when skimming though quickly...
         if prev_image is not None:
-            tags_changed = self._choices.record(prev_image)
-            if tags_changed and self._saved_choices_path is not None:
-                self._choices.save(self._saved_choices_path)
+            self._record_choices(prev_image)
+    
+    def _do_revert_image(self, event: RevertImageMessage) -> None:
+        logger.debug(f"Revert image {event}")
+        
+        # TODO: Implement
+    
+    def _do_view_image(self, event: ViewImageMessage) -> None:
+        logger.debug(f"View image {event}")
+        
+        image = self.current_image
+        assert image is not None
+        
+        match platform.system():
+            case "Windows":
+                os.startfile(image.path)
+            case "Darwin":
+                subprocess.run(["open", image.path])
+            case "Linux":
+                subprocess.run(["xdg-open", image.path])
+            case other:
+                logger.error(f"Unknown platform {other!r}. Cannot open image.")
     
     def _refresh_tags(self) -> None:
         image = self.current_image
@@ -438,6 +479,13 @@ class TaggerWidget(anywidget.AnyWidget):
                 tag.present = image.tags.has(tag.path, match="path")
         
         self.tag_groups = tag_groups
+    
+    def _record_choices(self, image: TaggedImage) -> bool:
+        tags_changed = self._choices.record(image)
+        if tags_changed and self._saved_choices_path is not None:
+            self._choices.save(self._saved_choices_path)
+        if tags_changed and image == self.current_image:
+            self.image_saved = True
     
     @property
     def current_image(self) -> TaggedImage | None:
@@ -467,6 +515,7 @@ class TaggerWidget(anywidget.AnyWidget):
         with self.hold_sync():
             self.image_idx = idx
             self.image = image_url
+            self.image_saved = self._choices.has(image)
             self._refresh_tags()
     
     @cachetools.cached(

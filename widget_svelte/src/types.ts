@@ -23,3 +23,9 @@ export interface ToggleGroupEvent {
 export interface SwitchImageEvent {
   idx: number;
 };
+
+export interface RevertImageEvent {
+};
+
+export interface ViewImageEvent {
+};

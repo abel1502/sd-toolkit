@@ -107,7 +107,7 @@
       <span><kbd>Ctrl</kbd>+... &ndash; disable group;</span>
       <span><kbd>Space</kbd> &ndash; next image;</span>
       <span><kbd>Shift</kbd>+<kbd>Space</kbd> &ndash; previous image;</span>
-      <span><kbd>Backspace</kbd> &ndash; undo changes to current image.</span>
+      <span><kbd>Backspace</kbd> &ndash; reset current image.</span>
     </div>
   </div>
 

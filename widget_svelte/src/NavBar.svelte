@@ -63,6 +63,6 @@
   @reference "./app.css";
   
   .nav-button {
-    @apply flex flex-row py-2 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 not-disabled:cursor-pointer text-gray-700 disabled:text-gray-300;
+    @apply flex flex-row py-2 gap-2 items-center border rounded not-disabled:hover:bg-gray-50 text-gray-700 disabled:text-gray-300;
   }
 </style>
