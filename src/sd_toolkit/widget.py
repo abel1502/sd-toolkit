@@ -241,6 +241,7 @@ class TaggerWidget(anywidget.AnyWidget):
     # Traitlets (Py -> JS)
     image: str = traitlets.Unicode("").tag(sync=True)
     image_saved: bool = traitlets.Bool(False).tag(sync=True)
+    # TODO: Separate group structure and the presence/absence of tags?
     tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List([]).tag(
         sync=True,
         **_use_cattrs(typing.Sequence[TagGroupInfo]),
@@ -248,6 +249,7 @@ class TaggerWidget(anywidget.AnyWidget):
     image_idx: int = traitlets.Int(0).tag(sync=True)
     image_count: int = traitlets.Int(0).tag(sync=True)
     
+    # TODO: Make these public and the traitlets private? Seems like this is the stuff a user might, if rarely, want to access, while the traitlets are meant for JS-side consumption only.
     _dataset: typing.Sequence[TaggedImage]
     _originals: dict[pathlib.Path, Tags]
     _choices: SavedChoices

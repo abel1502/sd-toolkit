@@ -4,7 +4,7 @@
   import { slide } from "svelte/transition";
   import ArrowsReload01 from "@iconify-svelte/ci/arrows-reload-01";
   import MagnifyingGlassPlus from "@iconify-svelte/ci/magnifying-glass-plus";
-  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent, RevertImageEvent, ViewImageEvent } from "./types";
+  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent } from "./types";
   import TagsPanel from "./TagsPanel.svelte";
   import NavBar from "./NavBar.svelte";
   import HotkeyBar from "./HotkeyBar.svelte";
