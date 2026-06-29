@@ -143,13 +143,21 @@ class SavedChoices:
         if choices_bitmask is None:
             return False
         
-        image.tags.view(lambda tag: tag in self._tags).clear().add((
+        image.tags.view(lambda tag: self._tags.has(tag, match="path")).clear().add((
             tag for i, tag
             in enumerate(self._tags)
             if (choices_bitmask >> i) & 1
         ), match="path").apply()
         
         return True
+    
+    def reset(self, image: TaggedImage, original: Tags) -> None:
+        logger.debug(f"Resetting tag choices for {image.path}")
+        
+        self._image_choices.pop(image.path, None)
+        
+        image.tags.view(lambda tag: self._tags.has(tag, match="path"))\
+            .clear().add(original, match="path").apply()
     
     def record(self, image: TaggedImage) -> bool:
         """
@@ -230,7 +238,7 @@ class TaggerWidget(anywidget.AnyWidget):
     _esm = STATIC / "tagger.js"
     _css = STATIC / "styles.css"
     
-    # Traitlets
+    # Traitlets (Py -> JS)
     image: str = traitlets.Unicode("").tag(sync=True)
     image_saved: bool = traitlets.Bool(False).tag(sync=True)
     tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List([]).tag(
@@ -241,16 +249,17 @@ class TaggerWidget(anywidget.AnyWidget):
     image_count: int = traitlets.Int(0).tag(sync=True)
     
     _dataset: typing.Sequence[TaggedImage]
+    _originals: dict[pathlib.Path, Tags]
     _choices: SavedChoices
     _saved_choices_path: pathlib.Path | None
     
     def __init__(
         self,
-        dataset: typing.Sequence[TaggedImage],  # TODO: Only allow Dataset specifically?
+        dataset: typing.Sequence[TaggedImage],
         groups: typing.Iterable[TagGroup],
         *,
         saved_choices: pathlib.Path | str | None = None,
-        redo: bool = False,
+        skip_reviewed: bool = True,
         auto_hotkeys: typing.Literal["top_level", "all", "none"] = "none",
         auto_promote: bool = False,
         out_capture: typing.Callable[[_Callback], _Callback] = lambda f: f,
@@ -292,33 +301,32 @@ class TaggerWidget(anywidget.AnyWidget):
             
             self._choices = SavedChoices.load_or_create(saved_choices, combined_tags)
             self._saved_choices_path = pathlib.Path(saved_choices)
-            
-            reviewed: set[pathlib.Path] = set()
-            for image in dataset:
-                was_reviewed = self._choices.apply(image)
-                if was_reviewed:
-                    reviewed.add(image.path)
-            
-            if not redo:
-                # TODO: Soft-skip instead:
-                # - Show tickmarks on images that have already been reviewed (including during the current session).
-                # - Make next and prev skip reviewed images by default, but visit them if shift is held.
-                #   - This would make prev go back to the very beginning every time, though.
-                # - Clicking on the seekbar should skip forward unless shift is held, in which case it shouldn't skip.
-                # - The event for switching image should have a skip direction parameter.
-                dataset = [image for image in dataset if image.path not in reviewed]
         else:
             self._choices = SavedChoices(combined_tags)
             self._saved_choices_path = None
         
+        # TODO: Soft-skip instead:
+        # - Show tickmarks on images that have already been reviewed (including during the current session).
+        # - Make next and prev skip reviewed images by default, but visit them if shift is held.
+        #   - This would make prev go back to the very beginning every time, though.
+        # - Clicking on the seekbar should skip forward unless shift is held, in which case it shouldn't skip.
+        # - The event for switching image should have a skip direction parameter.
+        
         self._dataset = dataset
+        self._originals = {image.path: image.tags.clone() for image in dataset}
+        
+        starting_idx: int = 0
+        for i, image in enumerate(dataset):
+            was_reviewed: bool = self._choices.apply(image)
+            if i == starting_idx and was_reviewed and skip_reviewed:
+                starting_idx += 1
         
         super().__init__(
             tag_groups=self._convert_groups(groups, auto_hotkeys),
             image_count=len(dataset),
         )
         
-        self.load_image(0)
+        self.load_image(starting_idx)
         
         self.on_msg(out_capture(TaggerWidget._on_msg))
     
@@ -373,8 +381,6 @@ class TaggerWidget(anywidget.AnyWidget):
         return tag_groups
     
     def _on_msg(self, data: typing.Mapping[str, typing.Any], buffers: list[bytes]) -> None:
-        # TODO: Mutex?
-        
         msg = deserialize_message(data)
         
         match msg:
@@ -395,7 +401,8 @@ class TaggerWidget(anywidget.AnyWidget):
         logger.debug(f"Toggle tag {event}")
         
         image = self.current_image
-        assert image is not None
+        if image is None:
+            return
         
         if event.present:
             image.tags.add([event.path], match="path")
@@ -409,7 +416,8 @@ class TaggerWidget(anywidget.AnyWidget):
         logger.debug(f"Toggle group {event}")
         
         image = self.current_image
-        assert image is not None
+        if image is None:
+            return
         
         group_tags = [tag.path for tag in self.tag_groups[event.idx].tags]
         
@@ -435,20 +443,30 @@ class TaggerWidget(anywidget.AnyWidget):
                 self.image_idx = event.idx
                 self.image_saved = False
         
-        # TODO: Should apply when advancing to next image after looking, but not when skimming though quickly...
+        # TODO: Should apply when advancing to next image after looking, but not when skimming through quickly...
         if prev_image is not None:
             self._record_choices(prev_image)
     
     def _do_revert_image(self, event: RevertImageMessage) -> None:
         logger.debug(f"Revert image {event}")
         
-        # TODO: Implement
+        image = self.current_image
+        if image is None:
+            return
+        
+        original_tags = self._originals.get(image.path)
+        assert original_tags is not None
+        
+        self._choices.reset(image, original_tags)
+        self._refresh_tags()
+        self.image_saved = False
     
     def _do_view_image(self, event: ViewImageMessage) -> None:
         logger.debug(f"View image {event}")
         
         image = self.current_image
-        assert image is not None
+        if image is None:
+            return
         
         match platform.system():
             case "Windows":

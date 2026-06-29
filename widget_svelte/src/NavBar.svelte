@@ -38,6 +38,8 @@
           style:width="calc(var(--progress) * 100%)"
           style:anchor-name="--progressbar"
         ></div>
+        <!-- TODO: click to seek (maybe also a tooltip for which image you're hovering over) -->
+        <!-- TODO: canvas showing the status for each image, instead of a single solid progressbar? -->
       </div>
     </div>
     <span
@@ -51,7 +53,7 @@
 
   <button 
     class="nav-button pl-4 pr-3"
-    onclick={nextImage}
+    onclick={nextImage}  // TODO: Explicitly specify whether the current image should be saved? Yes for next, no for prev and seek? Changing auto-saves already. Maybe also a button + hotkey to accept the image as-is? But then, I guess, space/next is already that. Just gotta document as much.
     disabled={curImageIdx == totalImages}
   >
     Next

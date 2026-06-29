@@ -9,10 +9,11 @@
     toggleGroup: (event: ToggleGroupEvent) => void;
     nextImage: () => void;
     prevImage: () => void;
+    revertImage: () => void;
     class?: string;
   };
 
-  let { tagGroups, toggleGroup, nextImage, prevImage, class: extraClass = "" }: Props = $props();
+  let { tagGroups, toggleGroup, nextImage, prevImage, revertImage, class: extraClass = "" }: Props = $props();
 
   let hotkeysEnabled = $state(false);
 
@@ -53,8 +54,8 @@
   }
 
   function handleUndo(event: ShortcutEventDetail) {
-    // TODO
-    console.log("Not implemented: undo");
+    revertImage();
+    event.originalEvent.preventDefault();
   }
 </script>
 

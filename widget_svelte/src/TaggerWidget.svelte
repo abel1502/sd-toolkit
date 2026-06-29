@@ -73,17 +73,15 @@
     goToImage({ idx: curImageIdx - 1 });
   }
 
-  function revertImage(event: RevertImageEvent) {
+  function revertImage() {
     model?.send({
       type: "revert_image",
-      ...event,
     });
   }
 
-  function viewImage(event: ViewImageEvent) {
+  function viewImage() {
     model?.send({
       type: "view_image",
-      ...event,
     })
   }
 
@@ -108,12 +106,12 @@
         {
           icon: ArrowsReload01,
           title: "Reset image tags",
-          onclick: () => revertImage({}),
+          onclick: revertImage,
         },
         {
           icon: MagnifyingGlassPlus,
           title: "Open in external viewer",
-          onclick: () => viewImage({}),
+          onclick: viewImage,
         }
       ]} />
       
@@ -125,5 +123,5 @@
 
   <NavBar class="mt-6" {curImageIdx} {totalImages} {nextImage} {prevImage} />
 
-  <HotkeyBar class="mt-4" {tagGroups} {toggleGroup} {nextImage} {prevImage} />
+  <HotkeyBar class="mt-4" {tagGroups} {toggleGroup} {nextImage} {prevImage} {revertImage} />
 </div>
