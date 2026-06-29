@@ -40,27 +40,11 @@ class TagInfo:
     present: bool
 
 
-@define
-class ToggleTagMessage:
-    path: tuple[str, ...]
-    present: bool
-
-@define
-class ToggleGroupMessage:
-    idx: int
-    present: bool
-
-@define
-class SwitchImageMessage:
-    idx: int
-
-@define
-class RevertImageMessage:
-    pass
-
-@define
-class ViewImageMessage:
-    pass
+def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
+    return dict(
+        to_json=lambda obj, manager: cattrs.unstructure(obj),
+        from_json=lambda obj, manager: cattrs.structure(obj, as_type),
+    )
 
 
 attrs.resolve_types(TagGroupInfo)
@@ -193,11 +177,50 @@ class SavedChoices:
         return image.path in self._image_choices
 
 
-def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
-    return dict(
-        to_json=lambda obj, manager: cattrs.unstructure(obj),
-        from_json=lambda obj, manager: cattrs.structure(obj, as_type),
-    )
+MESSAGES: dict[str, type[typing.Any]] = {}
+
+def _register_msg[T: type[typing.Any]](name: str) -> typing.Callable[[T], T]:
+    def decorator(cls: T) -> T:
+        MESSAGES[name] = cls
+        cls.MESSAGE_TYPE = name
+        return cls
+    return decorator
+
+@_register_msg("toggle_tag")
+@define
+class ToggleTagMessage:
+    path: tuple[str, ...]
+    present: bool
+
+@_register_msg("toggle_group")
+@define
+class ToggleGroupMessage:
+    idx: int
+    present: bool
+
+@_register_msg("switch_image")
+@define
+class SwitchImageMessage:
+    idx: int
+
+@_register_msg("revert_image")
+@define
+class RevertImageMessage:
+    pass
+
+@_register_msg("view_image")
+@define
+class ViewImageMessage:
+    pass
+
+
+def serialize_message(message: typing.Any) -> typing.Mapping[str, typing.Any]:
+    result = cattrs.unstructure(message)
+    result["type"] = message.MESSAGE_TYPE
+    return result
+
+def deserialize_message(data: typing.Mapping[str, typing.Any]) -> typing.Any:
+    return cattrs.structure(data, MESSAGES[data["type"]])
 
 
 _Callback = typing.Callable[[typing.Mapping[str, typing.Any]], typing.Any]
@@ -207,7 +230,7 @@ class TaggerWidget(anywidget.AnyWidget):
     _esm = STATIC / "tagger.js"
     _css = STATIC / "styles.css"
     
-    # Input traitlets
+    # Traitlets
     image: str = traitlets.Unicode("").tag(sync=True)
     image_saved: bool = traitlets.Bool(False).tag(sync=True)
     tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List([]).tag(
@@ -216,29 +239,6 @@ class TaggerWidget(anywidget.AnyWidget):
     )
     image_idx: int = traitlets.Int(0).tag(sync=True)
     image_count: int = traitlets.Int(0).tag(sync=True)
-    
-    # Output traitlets
-    # TODO: Replace with messages?
-    toggle_tag: ToggleTagMessage | None = traitlets.Any(None).tag(
-        sync=True,
-        **_use_cattrs(ToggleTagMessage),
-    )
-    toggle_group: ToggleGroupMessage | None = traitlets.Any(None).tag(
-        sync=True,
-        **_use_cattrs(ToggleGroupMessage),
-    )
-    switch_image: SwitchImageMessage | None = traitlets.Any(None).tag(
-        sync=True,
-        **_use_cattrs(SwitchImageMessage),
-    )
-    revert_image: RevertImageMessage | None = traitlets.Any(None).tag(
-        sync=True,
-        **_use_cattrs(RevertImageMessage),
-    )
-    view_image: ViewImageMessage | None = traitlets.Any(None).tag(
-        sync=True,
-        **_use_cattrs(ViewImageMessage),
-    )
     
     _dataset: typing.Sequence[TaggedImage]
     _choices: SavedChoices
@@ -320,7 +320,7 @@ class TaggerWidget(anywidget.AnyWidget):
         
         self.load_image(0)
         
-        self.observe(out_capture(self._on_change), names=["toggle_tag", "toggle_group", "switch_image", "revert_image", "view_image"])
+        self.on_msg(out_capture(TaggerWidget._on_msg))
     
     @staticmethod
     def _convert_groups(
@@ -372,31 +372,24 @@ class TaggerWidget(anywidget.AnyWidget):
         
         return tag_groups
     
-    def _on_change(self, change: typing.Mapping[str, typing.Any]) -> None:
+    def _on_msg(self, data: typing.Mapping[str, typing.Any], buffers: list[bytes]) -> None:
         # TODO: Mutex?
         
-        assert change["type"] == "change"
-        assert change["owner"] == self
+        msg = deserialize_message(data)
         
-        if change["new"] is None:
-            return
-        
-        match change["name"]:
-            case "toggle_tag":
-                self._do_toggle_tag(change["new"])
-            case "toggle_group":
-                self._do_toggle_group(change["new"])
-            case "switch_image":
-                self._do_switch_image(change["new"])
-            case "revert_image":
-                self._do_revert_image(change["new"])
-            case "view_image":
-                self._do_view_image(change["new"])
+        match msg:
+            case ToggleTagMessage():
+                self._do_toggle_tag(msg)
+            case ToggleGroupMessage():
+                self._do_toggle_group(msg)
+            case SwitchImageMessage():
+                self._do_switch_image(msg)
+            case RevertImageMessage():
+                self._do_revert_image(msg)
+            case ViewImageMessage():
+                self._do_view_image(msg)
             case _:
                 assert False
-        
-        # Mark event as handled
-        setattr(self, change["name"], None)
     
     def _do_toggle_tag(self, event: ToggleTagMessage) -> None:
         logger.debug(f"Toggle tag {event}")
@@ -461,9 +454,11 @@ class TaggerWidget(anywidget.AnyWidget):
             case "Windows":
                 os.startfile(image.path)
             case "Darwin":
-                subprocess.run(["open", image.path])
+                subprocess.check_call(["open", str(image.path)])
             case "Linux":
-                subprocess.run(["xdg-open", image.path])
+                env = dict(os.environ)
+                env.pop("GTK_PATH", None)  # https://github.com/ros2/ros2/issues/1406#issuecomment-1500898231
+                subprocess.check_call(["xdg-open", str(image.path)], env=env)
             case other:
                 logger.error(f"Unknown platform {other!r}. Cannot open image.")
     

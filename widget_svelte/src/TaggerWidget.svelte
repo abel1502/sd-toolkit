@@ -22,14 +22,6 @@
     image_idx: number;
     image_count: number;
     image_saved: boolean;
-
-    // Output only
-    // TODO: Replace with messages?
-    toggle_tag: ToggleTagEvent | null;
-    toggle_group: ToggleGroupEvent | null;
-    switch_image: SwitchImageEvent | null;
-    revert_image: RevertImageEvent | null;
-    view_image: ViewImageEvent | null;
   }
 
   interface Props {
@@ -49,25 +41,28 @@
 
   function toggleTag(event: ToggleTagEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
-    if (!bindings) return;
-
-    bindings.toggle_tag = event;
+    model?.send({
+      type: "toggle_tag",
+      ...event,
+    });
   }
 
   function toggleGroup(event: ToggleGroupEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
-    if (!bindings) return;
-
-    bindings.toggle_group = event;
+    model?.send({
+      type: "toggle_group",
+      ...event,
+    });
   }
 
   function goToImage(event: SwitchImageEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
-    if (!bindings) return;
-
     event.idx = Math.max(0, Math.min(event.idx, totalImages));
 
-    bindings.switch_image = event;
+    model?.send({
+      type: "switch_image",
+      ...event,
+    });
   }
 
   function nextImage() {
@@ -78,18 +73,18 @@
     goToImage({ idx: curImageIdx - 1 });
   }
 
-  function revertImage() {
-    // TODO: Add a spinner while waiting for updates from python somehow?
-    if (!bindings) return;
-
-    bindings.revert_image = {};
+  function revertImage(event: RevertImageEvent) {
+    model?.send({
+      type: "revert_image",
+      ...event,
+    });
   }
 
-  function viewImage() {
-    // TODO: Add a spinner while waiting for updates from python somehow?
-    if (!bindings) return;
-
-    bindings.view_image = {};
+  function viewImage(event: ViewImageEvent) {
+    model?.send({
+      type: "view_image",
+      ...event,
+    })
   }
 
   let width: number | undefined = $state()
@@ -113,12 +108,12 @@
         {
           icon: ArrowsReload01,
           title: "Reset image tags",
-          onclick: revertImage,
+          onclick: () => revertImage({}),
         },
         {
           icon: MagnifyingGlassPlus,
           title: "Open in external viewer",
-          onclick: viewImage,
+          onclick: () => viewImage({}),
         }
       ]} />
       
