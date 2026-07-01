@@ -12,8 +12,6 @@
 
   // TODO:
   // - Show when an image was already handled (a checkmark?)
-  // - Image zoom-in. Or just open file externally. Also maybe the file path diplayed somewhere to copy -- or even as a widget trait for python-side consumption only
-  // - Undo, or at least discarding the changes for the current image.
   // - Clicking on the progressbar to seek? Coloring progressbar based on which images are already handled?
   interface Bindings {
     // Input only
@@ -121,7 +119,7 @@
     </div>
   {/if}
 
-  <NavBar class="mt-6" {curImageIdx} {totalImages} {nextImage} {prevImage} />
+  <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} {nextImage} {prevImage} />
 
   <HotkeyBar class="mt-4" {tagGroups} {toggleGroup} {nextImage} {prevImage} {revertImage} />
 </div>

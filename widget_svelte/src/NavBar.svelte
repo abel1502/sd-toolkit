@@ -6,14 +6,39 @@
   interface Props {
     curImageIdx: number;
     totalImages: number;
+    goToImage: (event: SwitchImageEvent) => void;
     nextImage: () => void;
     prevImage: () => void;
     class?: string;
   };
 
-  let { curImageIdx, totalImages, nextImage, prevImage, class: extraClass = "" }: Props = $props();
+  let { curImageIdx, totalImages, goToImage, nextImage, prevImage, class: extraClass = "" }: Props = $props();
 
   let percentage = $derived(totalImages == 0 ? 1 : curImageIdx / totalImages);
+
+  function progressbarIdx(event: MouseEvent): number {
+    let bb = (event.currentTarget as HTMLElement).getBoundingClientRect();
+
+    let fraction = (event.clientX - bb.left) / bb.width;
+    fraction = Math.max(0, Math.min(1, fraction));
+
+    return Math.round(fraction * totalImages);
+  }
+
+  let progressbarTooltip: {
+    show: boolean;
+    x: number;
+    idx: number;
+  } = $state({
+    show: false,
+    x: 0,
+    idx: 0,
+  });
+
+  let pointerHandler = (event: PointerEvent) => {
+    progressbarTooltip.x = event.clientX;
+    progressbarTooltip.idx = progressbarIdx(event);
+  }
 </script>
 
 <div class={[
@@ -31,14 +56,23 @@
 
   <div class="flex-1 relative">
     <div class="py-[1.5em]">
-      <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div class="h-2 bg-gray-200 rounded-full cursor-pointer overflow-hidden"
+        onmousedown={(event) => goToImage({ idx: progressbarIdx(event) })}
+        onpointerenter={(event) => { progressbarTooltip.show = true; pointerHandler(event); }}
+        onpointermove={pointerHandler}
+        onpointerleave={() => { progressbarTooltip.show = false; }}
+        role="slider"
+        aria-valuenow={curImageIdx}
+        aria-valuemin="0"
+        aria-valuemax={totalImages}
+        tabindex={-1}
+      >
         <div
           class="h-full bg-blue-500 transition-[width] duration-300"
           style:--progress={percentage}
           style:width="calc(var(--progress) * 100%)"
           style:anchor-name="--progressbar"
         ></div>
-        <!-- TODO: click to seek (maybe also a tooltip for which image you're hovering over) -->
         <!-- TODO: canvas showing the status for each image, instead of a single solid progressbar? -->
       </div>
     </div>
@@ -49,6 +83,16 @@
     >
       {curImageIdx}/{totalImages}
     </span>
+    {#if progressbarTooltip.show}
+      <span
+        class="fixed block pointer-events-none text-black -translate-x-1/2 z-50 px-1 bg-gray-100 border border-gray-300 shadow-sm"
+        style:position-anchor="--progressbar"
+        style:bottom="calc(anchor(top) + 0.25em)"
+        style:left={`${progressbarTooltip.x}px`}
+      >
+        {progressbarTooltip.idx}/{totalImages}
+      </span>
+    {/if}
   </div>
 
   <button 
