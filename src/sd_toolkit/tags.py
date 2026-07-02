@@ -130,8 +130,7 @@ class _Indexes(typing.Protocol):
     tag: SortedMultiIndex[Tag, str]
 
 
-# TODO: Get rid of "auto", or rework it?
-type TagMatch = typing.Literal["auto", "tag", "path"]
+type TagMatch = typing.Literal["tag", "path"]
 
 
 @define(str=False, repr=False, eq=True, order=False, init=False)
@@ -281,7 +280,7 @@ class Tags:
     ) -> HierarchicalTagsDict:
         if orphans != "allow":
             for tag in list(self):
-                if tag.is_flat() or self.has(tag.parent_path, match="path"):
+                if tag.is_flat() or self.has(tag.parent_path):
                     continue
                 if orphans == "raise":
                     raise ValueError(f"Tag {tag!r} is orphaned in {self!r} ({tag.parent_path} is missing)")
@@ -334,11 +333,8 @@ class Tags:
         
         return TagsDiff(old, self, flatten=flatten)
     
-    def find(self, tag: TagLike, *, match: TagMatch = "auto") -> list[Tag]:
+    def find(self, tag: TagLike, *, match: TagMatch = "path") -> list[Tag]:
         tag = Tag.cast(tag)
-        
-        if match == "auto":
-            match = "tag" if tag.is_flat() else "path"
         
         if match == "path":
             found = self._tags.by.path.get(tag.path, None)
@@ -349,7 +345,7 @@ class Tags:
         assert match == "tag"
         return list(self._tags.by.tag[tag.tag])
     
-    def find_only_or[Default](self, tag: TagLike, default: Default, *, match: TagMatch = "auto") -> Tag | Default:
+    def find_only_or[Default](self, tag: TagLike, default: Default, *, match: TagMatch = "path") -> Tag | Default:
         tags = self.find(tag, match=match)
         if len(tags) == 1:
             return tags[0]
@@ -357,26 +353,26 @@ class Tags:
             return default
         raise ValueError(f"Found ambiguous match for {tag!r} in {self!r}: {tags!r}")
     
-    def find_only(self, tag: TagLike, *, match: TagMatch = "auto") -> Tag:
+    def find_only(self, tag: TagLike, *, match: TagMatch = "path") -> Tag:
         result = self.find_only_or(tag, None, match=match)
         if result is None:
             raise ValueError(f"Tag {tag!r} not found in {self!r}")
         return result
     
-    def count(self, tag: TagLike, *, match: TagMatch = "auto") -> int:
+    def count(self, tag: TagLike, *, match: TagMatch = "path") -> int:
         return len(self.find(tag, match=match))
     
-    def has(self, tag: TagLike, *, match: TagMatch = "auto") -> bool:
+    def has(self, tag: TagLike, *, match: TagMatch = "path") -> bool:
         return bool(self.count(tag, match=match))
     
-    def has_any(self, tags: TagsLike, *, match: TagMatch = "auto") -> bool:
+    def has_any(self, tags: TagsLike, *, match: TagMatch = "path") -> bool:
         tags = Tags.cast(tags)
         return any(self.has(tag, match=match) for tag in tags)
     
-    def has_none(self, tags: TagsLike, *, match: TagMatch = "auto") -> bool:
+    def has_none(self, tags: TagsLike, *, match: TagMatch = "path") -> bool:
         return not self.has_any(tags, match=match)
     
-    def has_all(self, tags: TagsLike, *, match: TagMatch = "auto") -> bool:
+    def has_all(self, tags: TagsLike, *, match: TagMatch = "path") -> bool:
         tags = Tags.cast(tags)
         return all(self.has(tag, match=match) for tag in tags)
     
@@ -409,7 +405,7 @@ class Tags:
     def all_pred(self, func: typing.Callable[[Tag], bool]) -> bool:
         return all(func(tag) for tag in self)
     
-    def add_strict(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def add_strict(self, tags: TagsLike, *, match: TagMatch = "path") -> typing.Self:
         tags = Tags.cast(tags)
         
         if self.has_any(tags, match=match):
@@ -419,7 +415,7 @@ class Tags:
         
         return self
 
-    def add(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def add(self, tags: TagsLike, *, match: TagMatch = "path") -> typing.Self:
         tags = Tags.cast(tags)
         
         for tag in tags:
@@ -429,7 +425,7 @@ class Tags:
         return self
     
     # TODO: Here and elsewhere, maybe add some handling for subtags simultaneously with the owner tag?
-    def remove_strict(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def remove_strict(self, tags: TagsLike, *, match: TagMatch = "path") -> typing.Self:
         tags = Tags.cast(tags)
         
         if not self.has_all(tags, match=match):
@@ -441,7 +437,7 @@ class Tags:
         
         return self
     
-    def remove(self, tags: TagsLike, *, match: TagMatch = "auto") -> typing.Self:
+    def remove(self, tags: TagsLike, *, match: TagMatch = "path") -> typing.Self:
         tags = Tags.cast(tags)
         
         for tag in tags:
@@ -459,7 +455,7 @@ class Tags:
         old: TagsLike,
         new: TagsLike,
         *,
-        match: TagMatch = "auto",
+        match: TagMatch = "path",
         partial: bool = False,
     ) -> typing.Self:
         old = Tags.cast(old)
@@ -482,7 +478,7 @@ class Tags:
         from_: TagLike,
         to: TagLike,
         *,
-        match: TagMatch = "auto",
+        match: TagMatch = "path",
         parent_only: bool = False,
         with_children: bool = True,
     ) -> typing.Self:
@@ -490,7 +486,7 @@ class Tags:
         to_path = Tag.cast(to).path
         
         if not with_children:
-            return self.replace(from_, from_.moved(to_path, parent_only=parent_only), match="path")
+            return self.replace(from_, from_.moved(to_path, parent_only=parent_only))
         
         from_path = from_.path
         if parent_only:
@@ -518,7 +514,7 @@ class Tags:
         from_: TagLike,
         to: str,
         *,
-        match: TagMatch = "auto",
+        match: TagMatch = "path",
         with_children: bool = True,
     ) -> typing.Self:
         from_ = Tag.cast(from_)
@@ -642,8 +638,8 @@ class Tags:
                 tag.moved(prototype.path)
                 for prototype in template.find(tag, match="tag")
                 if prototype.is_flat() or (
-                    self.has(prototype.parent_path, match="path") or
-                    self.has((prototype.path[-2],), match="path")
+                    self.has(prototype.parent_path) or
+                    self.has((prototype.path[-2],))
                 ) 
             ] or tag
         
@@ -787,8 +783,8 @@ class TagsView(Tags):
         )
     
     def apply(self) -> Tags:
-        self._base.remove_strict(self._initial, match="path")
-        self._base.add(self, match="path")
+        self._base.remove_strict(self._initial)
+        self._base.add(self)
         return self._base
     
     def __enter__(self) -> typing.Self:
@@ -1011,7 +1007,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
         return children.move_all(tag, force=True).add([
             Tag.cast(tag.path[:i + 1])
             for i in range(len(tag.path))
-        ], match="path")
+        ])
     
     @generate("hierarchical tags")
     def parser() -> typing.Generator[Parser[list[_Token | str], typing.Any], typing.Any, Tags]:
@@ -1020,7 +1016,7 @@ def _define_parser() -> parsy.Parser[str, Tags]:
             return Tags()
         for more in (yield match_item(_Token.comma, "comma").then(tag_with_children).many()):
             more: list[Tags]
-            result.add(more, match="path")
+            result.add(more)
         yield match_item(_Token.comma, "comma").optional()
         return result
     

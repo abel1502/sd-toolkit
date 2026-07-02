@@ -64,7 +64,7 @@ class TagsDiff:
         ))
     
     def _compute_old_metdatada(self, old_tag: Tag) -> typing.Generator[MetadataUpdate, None, None]:
-        new_tag = self.new.find_only_or(old_tag, None, match="path")
+        new_tag = self.new.find_only_or(old_tag, None)
         yield diff_removed.set(new_tag is None)
         
         if new_tag is not None:
@@ -73,7 +73,7 @@ class TagsDiff:
             )
     
     def _compute_new_metdatada(self, new_tag: Tag) -> typing.Generator[MetadataUpdate, None, None]:
-        old_tag = self.old.find_only_or(new_tag, None, match="path")
+        old_tag = self.old.find_only_or(new_tag, None)
         yield diff_added.set(old_tag is None)
         
         if old_tag is not None:
@@ -91,7 +91,7 @@ class TagsDiff:
     ) -> RichText:
         def formatter(tags: Tags) -> TagFormatHook:
             def _tag_format_hook(formatted: str, path: tuple[str, ...], children: Tags) -> str:
-                tag = tags.find_only(path, match="path")
+                tag = tags.find_only(path)
                 
                 if tag.metadata[diff_added]:
                     formatted = f"[green]+{formatted}[/]"

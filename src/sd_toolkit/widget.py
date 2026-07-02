@@ -143,11 +143,11 @@ class SavedChoices:
         if choices_bitmask is None:
             return False
         
-        image.tags.view(lambda tag: self._tags.has(tag, match="path")).clear().add((
+        image.tags.view(lambda tag: self._tags.has(tag)).clear().add((
             tag for i, tag
             in enumerate(self._tags)
             if (choices_bitmask >> i) & 1
-        ), match="path").apply()
+        )).apply()
         
         return True
     
@@ -156,8 +156,8 @@ class SavedChoices:
         
         self._image_choices.pop(image.path, None)
         
-        image.tags.view(lambda tag: self._tags.has(tag, match="path"))\
-            .clear().add(original, match="path").apply()
+        image.tags.view(lambda tag: self._tags.has(tag))\
+            .clear().add(original).apply()
     
     def record(self, image: TaggedImage) -> bool:
         """
@@ -172,7 +172,7 @@ class SavedChoices:
             (
                 1 << i for i, tag
                 in enumerate(self._tags)
-                if image.tags.has(tag.path, match="path")
+                if image.tags.has(tag)
             ),
             0,
         )
@@ -291,7 +291,7 @@ class TaggerWidget(anywidget.AnyWidget):
             group.flatten()
             for group in groups
         ):
-            combined_tags.add(group._tags, match="path")
+            combined_tags.add(group._tags)
         
         if auto_promote:
             for image in dataset:
@@ -407,9 +407,9 @@ class TaggerWidget(anywidget.AnyWidget):
             return
         
         if event.present:
-            image.tags.add([event.path], match="path")
+            image.tags.add(Tag(event.path))
         else:
-            image.tags.remove([event.path], match="path")
+            image.tags.remove(Tag(event.path))
         
         self._refresh_tags()
         self._record_choices(image)
@@ -424,9 +424,9 @@ class TaggerWidget(anywidget.AnyWidget):
         group_tags = [tag.path for tag in self.tag_groups[event.idx].tags]
         
         if event.present:
-            image.tags.add(group_tags, match="path")
+            image.tags.add(group_tags)
         else:
-            image.tags.remove(group_tags, match="path")
+            image.tags.remove(group_tags)
         
         self._refresh_tags()
         self._record_choices(image)
@@ -491,7 +491,7 @@ class TaggerWidget(anywidget.AnyWidget):
         tag_groups = copy.deepcopy(self.tag_groups)
         for group in tag_groups:
             for tag in group.tags:
-                tag.present = image.tags.has(tag.path, match="path")
+                tag.present = image.tags.has(tag)
         
         self.tag_groups = tag_groups
     
