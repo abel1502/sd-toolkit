@@ -134,6 +134,7 @@ class _Indexes(typing.Protocol):
     tag: SortedMultiIndex[Tag, str]
 
 
+# TODO: Get rid of "auto", or rework it?
 type TagMatch = typing.Literal["auto", "tag", "path"]
 
 
