@@ -277,8 +277,23 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         raise ValueError(f"Path {path} is not relative to any of {self.roots}")
     
-    def clone(self) -> Dataset:
-        return copy.deepcopy(self)
+    def clone(self, deep: bool = True) -> Dataset:
+        """
+        Copies the dataset.
+        
+        :param deep: If `True`, the new dataset will be completely independent of the original.
+            If `False`, the `TaggedImage` objects will be the same (so changes to them in the
+            copy will reflect on the original).
+        :returns: The created copy of the dataset.
+        """
+        
+        if deep:
+            return copy.deepcopy(self)
+        
+        return Dataset(
+            roots=self.roots,
+            contents=list(self.contents),
+        )
     
     def save_checkpoint(self, path: pathlib.Path | str, *, overwrite: bool = False) -> None:
         if isinstance(path, str):
