@@ -49,6 +49,7 @@ img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
 @define(repr=False)
 class Dataset(typing.Sequence[TaggedImage]):
     roots: list[pathlib.Path]
+    # TODO: nanotable.Table?
     contents: list[TaggedImage]
     
     _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)

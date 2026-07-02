@@ -138,12 +138,12 @@ class TagsDiff:
 
 
 img_diff_old_tags = MetadataField[Tags](
-    "img_diff_old_tags",
+    "diff_old_tags",
     Tags,
 )
 
 img_diff_new_tags = MetadataField[Tags](
-    "img_diff_new_tags",
+    "diff_new_tags",
     Tags,
 )
 
