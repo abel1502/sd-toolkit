@@ -101,28 +101,24 @@ tag_category = MetadataField[typing.Literal["artist", "character", "copyright", 
     "tag_category",
     typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"],
     default="unknown",
-    merge="beat_default",
 )
 
 tag_is_trigger = MetadataField[bool](
     "tag_is_trigger",
     bool,
     default=False,
-    merge="beat_default",
 )
 
 tag_origin = MetadataField[str](
     "origin",
     str,
     default="unknown",
-    merge="beat_default",
 )
 
 tag_confidence = MetadataField[float](
     "tag_confidence",
     float,
     default=1.0,
-    merge=lambda old, new: max(old, new),
 )
 
 
@@ -552,7 +548,7 @@ class Tags:
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
         clear_rest: bool = False,
     ) -> typing.Self:
-        self.apply_metadata(tag_is_trigger.set(True, existing="overwrite"), pred=pred)
+        self.apply_metadata(tag_is_trigger.set(True), pred=pred)
         if clear_rest:
             self.apply_metadata(tag_is_trigger.unset(), pred=pred)
         return self

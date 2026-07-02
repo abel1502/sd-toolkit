@@ -14,9 +14,6 @@ class _HasMetadata(typing.Protocol):
     metadata: Metadata
 
 
-type MetadataExisting = typing.Literal["raise", "merge", "overwrite"]
-
-
 @define(init=False, frozen=True)
 class MetadataField[ValueT]:
     REGISTRY: typing.ClassVar[dict[str, MetadataField]] = {}
@@ -24,14 +21,12 @@ class MetadataField[ValueT]:
     key: str
     value_type: typing.Type[ValueT]  # | types.GenericAlias | object
     default: typing.Callable[[], ValueT] | None
-    merge: typing.Callable[[ValueT, ValueT], ValueT] | None
     
     def __init__(
         self,
         key: str,
         value_type: typing.Type[ValueT],
         default: ValueT | typing.Callable[[], ValueT] | None = None,
-        merge: typing.Callable[[ValueT, ValueT], ValueT] | typing.Literal["conflict", "overwrite", "keep", "beat_default"] = "conflict",
     ):
         """
         .. Note::
@@ -45,42 +40,10 @@ class MetadataField[ValueT]:
         if default is not None and not callable(default):
             default = lambda result=default: result
         
-        if isinstance(merge, str):
-            match merge:
-                case "conflict":
-                    def merge(old: ValueT, new: ValueT) -> ValueT:
-                        if old != new:
-                            raise ValueError(f"Conflicting metadata values: {old!r} != {new!r}")
-                        return new
-                
-                case "overwrite":
-                    def merge(old: ValueT, new: ValueT) -> ValueT:
-                        return new
-                
-                case "keep":
-                    def merge(old: ValueT, new: ValueT) -> ValueT:
-                        return old
-                
-                case "beat_default":
-                    if default is None:
-                        raise ValueError("The 'beat_default' policy is meaningless without a default value")
-                    
-                    def merge(old: ValueT, new: ValueT) -> ValueT:
-                        default = self.default()
-                        if old == default:
-                            return new
-                        if new == default:
-                            return old
-                        raise ValueError(f"Conflicting metadata values: {old!r} != {new!r}")
-                
-                case _:
-                    raise ValueError(f"Invalid merge strategy: {merge!r}")
-        
         self.__attrs_init__(
             key=key,
             value_type=value_type,
             default=default,
-            merge=merge,
         )
         
         MetadataField.REGISTRY[self.key] = self
@@ -116,8 +79,8 @@ class MetadataField[ValueT]:
         
         return obj.get(self, default)
     
-    def set(self, value: ValueT, *, existing: MetadataExisting = "overwrite") -> MetadataUpdate:
-        return lambda metadata: metadata.set(self, value, existing=existing)
+    def set(self, value: ValueT, *, overwrite: bool = True) -> MetadataUpdate:
+        return lambda metadata: metadata.set(self, value, overwrite=overwrite)
     
     def unset(self) -> MetadataUpdate:
         return lambda metadata: metadata.unset(self)
@@ -166,6 +129,16 @@ class Metadata:
     def has[ValueT](self, field: MetadataField[ValueT]) -> bool:
         return field.key in self.contents or field.default is not None
     
+    def has_is_set(self, field: MetadataField) -> bool:
+        """
+        A stricter version of `has` that doesn't consider any field with a default as always present.
+        
+        :param field: The field to check.
+        :return: `True` if the field is explicitly included in the metadata.
+        """
+        
+        return field.key in self.contents
+    
     @typing.overload
     def __contains__[ValueT](self, field: MetadataField[ValueT]) -> bool:
         ...
@@ -180,12 +153,9 @@ class Metadata:
         
         return self.has(field)
     
-    def set[ValueT](self, field: MetadataField[ValueT], value: ValueT, *, existing: MetadataExisting = "overwrite") -> Metadata:
-        if self.has(field):
-            if existing == "raise":
-                raise ValueError(f"Metadata field {field.key!r} already exists in {self!r}")
-            if existing == "merge":
-                value = field.merge(self[field], value)
+    def set[ValueT](self, field: MetadataField[ValueT], value: ValueT, *, overwrite: bool = True) -> Metadata:
+        if self.has(field) and not overwrite:
+            raise ValueError(f"Metadata field {field.key!r} already exists in {self!r}")
         
         return attrs.evolve(self, contents=self.contents | {field.key: value})
     
@@ -197,34 +167,6 @@ class Metadata:
     
     def update(self, *updates: MetadataUpdate) -> Metadata:
         return functools.reduce(lambda metadata, update: update(metadata), updates, self)
-    
-    # TODO: Use this in Tags operations?
-    def merge(self, new: Metadata) -> Metadata:
-        missing = object()
-        all_keys = set(self.contents.keys()) | set(new.contents.keys())
-        result: dict[str, typing.Any] = {}
-        
-        for key in all_keys:
-            field = MetadataField.REGISTRY.get(key)
-            if field is None:
-                logger.warning(f"Unknown metadata field {key!r} encountered during merge, skipping")
-                continue
-            
-            # Note: defaults are in effect, so `missing` is only possible for unset fields without defaults
-            old_value = self.get(key, missing)
-            new_value = new.get(key, missing)
-            
-            value: typing.Any
-            if old_value is missing:
-                value = new_value
-            elif new_value is missing:
-                value = old_value
-            else:
-                value = field.merge(old_value, new_value)
-            
-            result[field.key] = value
-        
-        return Metadata(result)
 
 
 @CBOR_CONVERTER.register_structure_hook
@@ -261,5 +203,4 @@ __all__ = [
     "Metadata",
     "MetadataField",
     "MetadataUpdate",
-    "MetadataExisting",
 ]

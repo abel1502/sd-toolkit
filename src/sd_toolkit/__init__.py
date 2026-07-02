@@ -11,7 +11,7 @@ else:
 
 from sd_toolkit.tags import TagLike, Tag, TagsLike, TagMatch, Tags, tag_category, tag_is_trigger, tag_origin, tag_confidence
 from sd_toolkit.dataset import Dataset, img_gallery_dl_post, TaggedImage
-from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate, MetadataExisting
+from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming, FlatNaming, SequentialNaming
 from sd_toolkit.misc import ipython_show_multiline_strings
 from sd_toolkit.widget import TaggerWidget, TagGroup
@@ -35,7 +35,6 @@ __all__ = [
     "Metadata",
     "MetadataField",
     "MetadataUpdate",
-    "MetadataExisting",
     "NamingStrategy",
     "DefaultNaming",
     "FlatNaming",

@@ -412,11 +412,12 @@ class Dataset(typing.Sequence[TaggedImage]):
     def all_tags(self) -> Tags:
         """
         .. Note::
-            This clears tag metadata (for now). If you need it intact, consider using `iter_tags` instead
+            This effectively only preserves the first instance of each tag.
+            Use `iter_tags` instead if you need the duplicates.
         """
         tags = Tags()
         for img in self.contents:
-            tags.add(img.tags.clone().flatten().clear_metadata())  # TODO: Merge metadata instead?
+            tags.add(img.tags.clone().flatten())
         return tags
     
     def iter_tags(self) -> typing.Generator[Tag, None, None]:
