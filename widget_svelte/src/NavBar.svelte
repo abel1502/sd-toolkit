@@ -25,19 +25,13 @@
     return Math.round(fraction * totalImages);
   }
 
-  let progressbarTooltip: {
-    show: boolean;
-    x: number;
-    idx: number;
-  } = $state({
-    show: false,
-    x: 0,
-    idx: 0,
-  });
+  let tooltipShow: boolean = $state(false);
+  let tooltipX: number = $state(0);
+  let tooltipIdx: number = $state(0);
 
   let pointerHandler = (event: PointerEvent) => {
-    progressbarTooltip.x = event.clientX;
-    progressbarTooltip.idx = progressbarIdx(event);
+    tooltipX = event.clientX;
+    tooltipIdx = progressbarIdx(event);
   }
 </script>
 
@@ -58,9 +52,9 @@
     <div class="py-[1.5em]">
       <div class="h-2 bg-gray-200 rounded-full cursor-pointer overflow-hidden"
         onmousedown={(event) => goToImage({ idx: progressbarIdx(event) })}
-        onpointerenter={(event) => { progressbarTooltip.show = true; pointerHandler(event); }}
+        onpointerenter={(event) => { tooltipShow = true; pointerHandler(event); }}
         onpointermove={pointerHandler}
-        onpointerleave={() => { progressbarTooltip.show = false; }}
+        onpointerleave={() => { tooltipShow = false; }}
         role="slider"
         aria-valuenow={curImageIdx}
         aria-valuemin="0"
@@ -83,16 +77,15 @@
     >
       {curImageIdx}/{totalImages}
     </span>
-    {#if progressbarTooltip.show}
-      <span
-        class="fixed block pointer-events-none text-black -translate-x-1/2 z-50 px-1 bg-gray-100 border border-gray-300 shadow-sm"
-        style:position-anchor="--progressbar"
-        style:bottom="calc(anchor(top) + 0.25em)"
-        style:left={`${progressbarTooltip.x}px`}
-      >
-        {progressbarTooltip.idx}/{totalImages}
-      </span>
-    {/if}
+    <span
+      class="fixed block pointer-events-none text-black -translate-x-1/2 z-50 px-1 bg-gray-100 border border-gray-300 shadow-sm"
+      hidden={!tooltipShow}
+      style:position-anchor="--progressbar"
+      style:bottom="calc(anchor(top) + 0.25em)"
+      style:left={`${tooltipX}px`}
+    >
+      {tooltipIdx}/{totalImages}
+    </span>
   </div>
 
   <button 
