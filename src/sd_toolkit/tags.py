@@ -457,39 +457,26 @@ class Tags:
         self._tags.clear()
         return self
     
-    # TODO: Deprecate? Seems fairly inconvenient
     def replace(
         self,
-        original: Tag | typing.Iterable[Tag],
-        replacement: TagsLike,
+        old: TagsLike,
+        new: TagsLike,
         *,
-        allow_empty_original: bool = False,
+        match: TagMatch = "auto",
+        partial: bool = False,
     ) -> typing.Self:
-        if isinstance(original, Tag):
-            original = [original]
+        old = Tags.cast(old)
+        new = Tags.cast(new)
+        
+        present: bool
+        if partial:
+            present = self.has_any(old, match=match)
         else:
-            original = list(original)
+            present = self.has_all(old, match=match)
         
-        replacement = Tags.cast(replacement)
-        
-        if not all(isinstance(tag, Tag) for tag in original):
-            raise TypeError(f"`original` must be a single `Tag` or an iterable of `Tag`s returned by one of the `find` methods")
-        
-        if not all(tag in self for tag in original):
-            raise ValueError(f"`replace` expects original to contain exact tag objects returned by one of the `find` methods")
-        
-        if not original and not allow_empty_original:
-            raise ValueError(f"Trying to `replace` with an empty `original`. You may have forgotten to check the `find` results. If this is intentional, specify `allow_empty_original=True`")
-        
-        for tag in original:
-            self._tags.remove(tag)
-        
-        try:
-            self.add_strict(replacement, match="path")
-        except ValueError:
-            # Shouldn't fail since we just removed these exact tags
-            self.add_strict(original, match="path")
-            raise
+        if present:
+            self.remove(old, match=match)
+            self.add(new, match="path")
         
         return self
     
@@ -506,7 +493,7 @@ class Tags:
         to_path = Tag.cast(to).path
         
         if not with_children:
-            return self.replace(from_, from_.moved(to_path, parent_only=parent_only))
+            return self.replace(from_, from_.moved(to_path, parent_only=parent_only), match="path")
         
         from_path = from_.path
         if parent_only:
