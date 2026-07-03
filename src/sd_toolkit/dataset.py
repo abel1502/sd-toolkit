@@ -49,7 +49,7 @@ img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
 @define(repr=False)
 class Dataset(typing.Sequence[TaggedImage]):
     roots: list[pathlib.Path]
-    # TODO: nanotable.Table?
+    # Note: cannot realistically be a nanotable.Table, because the tags need to be mutable without an explicit `rekey`.
     contents: list[TaggedImage]
     
     _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
@@ -398,15 +398,44 @@ class Dataset(typing.Sequence[TaggedImage]):
             func(img)
         return self
 
-    def apply_tags(self, func: typing.Callable[[Tags], None]) -> typing.Self:
+    def apply_to_tags(self, func: typing.Callable[[Tags], None]) -> typing.Self:
         return self.apply(lambda img: func(img.tags))
     
-    def filter(self, func: typing.Callable[[TaggedImage], bool]) -> typing.Self:
-        self.contents = [img for img in self.contents if func(img)]
+    def filter(self, pred: typing.Callable[[TaggedImage], bool]) -> typing.Self:
+        """
+        Discards all images for which `pred` returns `False` from the dataset.
+        
+        :param pred: The predicate to filter by.
+        :returns: The same dataset instance, returned for convenient chaining.
+        
+        .. Note::
+            If you want to keep the dataset as-is and get a new object, see `view`.
+        """
+        
+        self.contents = [img for img in self.contents if pred(img)]
         return self
     
-    def filter_tags(self, func: typing.Callable[[Tags], bool]) -> typing.Self:
-        return self.filter(lambda img: func(img.tags))
+    def filter_on_tags(self, pred: typing.Callable[[Tags], bool]) -> typing.Self:
+        return self.filter(lambda img: pred(img.tags))
+    
+    def view(self, pred: typing.Callable[[TaggedImage], bool]) -> Dataset:
+        """
+        Returns a new dataset with only the images for which `pred` returns `True`.
+        The image objects are the same, so changes to their tags will reflect on the
+        original dataset.
+        
+        :param pred: The predicate to filter by.
+        :returns: The new, filtered dataset.
+        
+        .. Note::
+            If you want to change the original dataset, consider `filter` instead.
+            If you want an independent copy, use `clone` additionally.
+        """
+        
+        return self.clone(deep=False).filter(pred)
+    
+    def view_on_tags(self, pred: typing.Callable[[Tags], bool]) -> Dataset:
+        return self.view(lambda img: pred(img.tags))
 
     # TODO: More tags accessor(s)
     def all_tags(self) -> Tags:
@@ -482,9 +511,6 @@ class Dataset(typing.Sequence[TaggedImage]):
 
 attrs.resolve_types(TaggedImage)
 attrs.resolve_types(Dataset)
-
-
-# TODO: Dataset view/subset?
 
 
 __all__ = [
