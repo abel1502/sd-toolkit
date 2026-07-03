@@ -177,11 +177,27 @@ class Tags:
         return cls(tags)
     
     @classmethod
-    def parse_plain(cls, text: str, separator: str = ",") -> Tags:
-        return cls(filter(None, map(str.strip, text.split(separator))))
+    def parse_plain(cls, text: str, *, sep: str = ",") -> Tags:
+        return cls(filter(None, map(str.strip, text.split(sep))))
     
-    def to_plain(self, *, trailing_comma: bool = True) -> str:
-        return ', '.join(map(str, self)) + (',' if trailing_comma and self else '')
+    def to_plain(
+        self,
+        *,
+        trailing_comma: bool = True,
+        sort_key: typing.Callable[[Tag], typing.Any] | None = None,
+        sort_chunks: typing.Callable[[Tags], typing.Iterable[TagsLike]] | None = None,
+    ) -> str:
+        suffix: str = "," if trailing_comma and self else ""
+        
+        if sort_chunks is not None:
+            return ", ".join(
+                Tags.cast(chunk).to_plain(trailing_comma=False, sort_key=sort_key)
+                for chunk in sort_chunks(self)
+            ) + suffix
+        
+        tags: typing.Iterable[Tag] = self if sort_key is None else sorted(self, key=sort_key)
+        
+        return ", ".join(map(str, tags)) + suffix
     
     @classmethod
     def parse_hierarchical(cls, text: str) -> Tags:
