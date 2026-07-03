@@ -491,7 +491,7 @@ class TaggerWidget(anywidget.AnyWidget):
         tag_groups = copy.deepcopy(self.tag_groups)
         for group in tag_groups:
             for tag in group.tags:
-                tag.present = image.tags.has(tag)
+                tag.present = image.tags.has(tag.path)
         
         self.tag_groups = tag_groups
     
