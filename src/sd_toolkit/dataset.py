@@ -436,6 +436,10 @@ class Dataset(typing.Sequence[TaggedImage]):
     
     def view_on_tags(self, pred: typing.Callable[[Tags], bool]) -> Dataset:
         return self.view(lambda img: pred(img.tags))
+    
+    def sort(self, key: typing.Callable[[TaggedImage], typing.Any]) -> typing.Self:
+        self.contents.sort(key=key)
+        return self
 
     # TODO: More tags accessor(s)
     def all_tags(self) -> Tags:
