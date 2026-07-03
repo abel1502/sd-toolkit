@@ -7,6 +7,7 @@ export interface TagGroupInfo {
 export interface TagInfo {
   tag: string;
   path: string[];
+  path_str: string;
   present: boolean;
 };
 

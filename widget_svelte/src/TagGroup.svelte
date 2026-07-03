@@ -41,7 +41,7 @@
     {/if}
   </button>
   
-  {#each tagGroup.tags as tag (tag.path.join("\0"))}
+  {#each tagGroup.tags as tag (tag.path_str)}
     <TagPill tag={tag} {toggleTag} />
   {/each}
 </div>

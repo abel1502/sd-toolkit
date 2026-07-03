@@ -37,6 +37,7 @@ class TagGroupInfo:
 class TagInfo:
     tag: str
     path: tuple[str, ...]
+    path_str: str
     present: bool
 
 
@@ -55,7 +56,8 @@ attrs.resolve_types(TagInfo)
 class TagGroup:
     _tags: Tags
     _hotkey: str | None
-    _scope: Tag | None
+    _scope: tuple[str, ...]
+    _scope_explicit: bool
     _subgroups: list[TagGroup] = field(factory=list)
     
     def __init__(
@@ -65,6 +67,11 @@ class TagGroup:
         hotkey: str | None = None,
         scope: TagLike | None = None,
     ):
+        """
+        .. Note::
+            `scope=None` means the scope will be inferred. Use `scope=()` to force root scope.
+        """
+        
         tags = Tags.cast(tags, clone=True)
         
         if hotkey is not None:
@@ -72,19 +79,22 @@ class TagGroup:
                 raise ValueError("Hotkey must be a single number or letter key")
             hotkey = hotkey.upper()
         
-        if scope is not None:
-            scope = Tag.cast(scope)
+        scope_explicit = scope is not None
+        if scope_explicit:
+            scope = Tag.cast(scope).path
             tags.move_all(scope)
         elif tags:
             scope = next(iter(tags)).path
             for tag in tags:
                 scope = tuple(x for x, _ in itertools.takewhile(lambda p: p[0] == p[1], zip(scope, tag.path)))
-            scope = Tag.cast(scope) if scope else None
+        else:
+            scope = None
         
         self.__attrs_init__(
             tags=tags,
             hotkey=hotkey,
             scope=scope,
+            scope_explicit=scope_explicit,
         )
     
     def subgroups(self, *subgroups: TagGroup | TagsLike, inherit_scope: typing.Literal["auto"] | bool = "auto") -> typing.Self:
@@ -92,9 +102,15 @@ class TagGroup:
             if not isinstance(subgroup, TagGroup):
                 subgroup = TagGroup(subgroup)
             
-            if self._scope is not None and (inherit_scope is True or (inherit_scope == "auto" and subgroup._scope is None)):
+            if (
+                inherit_scope is True or
+                (
+                    inherit_scope == "auto" and
+                    not subgroup._scope_explicit
+                )
+            ):
                 subgroup._tags.move_all(self._scope)
-                subgroup._scope = self._scope
+                subgroup._scope = self._scope + subgroup._scope
             
             self._subgroups.append(subgroup)
         
@@ -367,6 +383,7 @@ class TaggerWidget(anywidget.AnyWidget):
                     TagInfo(
                         tag=tag.tag,
                         path=tag.path,
+                        path_str=tag.to_hierarchical_str(),
                         present=False,
                     )
                     for tag in group_def._tags

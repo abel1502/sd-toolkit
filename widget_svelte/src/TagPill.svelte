@@ -16,6 +16,7 @@
     tag.present ? "tag-btn--on" : "tag-btn--off",
     extraClass,
   ]}
+  title={tag.path_str}
   onclick={() => toggleTag({
     path: tag.path,
     present: !tag.present

@@ -64,6 +64,9 @@ class Tag:
     def __str__(self) -> str:
         return self.tag
     
+    def to_hierarchical_str(self) -> str:
+        return Tags([self]).to_hierarchical_str(orphans="ignore", trailing_comma=False)
+    
     def is_flat(self) -> bool:
         return len(self.path) == 1
     
