@@ -832,12 +832,6 @@ class TagsView(Tags):
     @typing.override
     def from_hierarchical_dict(cls, *args, **kwargs) -> typing.Never:
         raise NotImplementedError(f"Do not create {cls.__name__} instances directly. Use Tags.view() instead.")
-    
-
-
-attrs.resolve_types(Tag)
-attrs.resolve_types(Tags)
-attrs.resolve_types(TagsView)
 
 
 @CBOR_CONVERTER.register_unstructure_hook

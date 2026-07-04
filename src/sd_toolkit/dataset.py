@@ -244,9 +244,11 @@ class Dataset(typing.Sequence[TaggedImage]):
                 logger.info(f"Would write image tags ({len(img.tags)}) to {dest_tags_path}")
                 continue
             
+            dest_img_path.parent.mkdir(parents=True, exist_ok=True)
+            
             if use_links:
                 logger.debug(f"Linking {img.path} to {dest_img_path}")
-                img.path.hardlink_to(dest_img_path)
+                dest_img_path.hardlink_to(img.path)
             else:
                 logger.debug(f"Copying {img.path} to {dest_img_path}")
                 shutil.copyfile(img.path, dest_img_path)
@@ -274,7 +276,7 @@ class Dataset(typing.Sequence[TaggedImage]):
     def _rel_path(self, path: pathlib.Path) -> pathlib.Path:
         for root in self.roots:
             if path.is_relative_to(root):
-                return path.relative_to(self.root)
+                return path.relative_to(root)
         
         raise ValueError(f"Path {path} is not relative to any of {self.roots}")
     
@@ -511,10 +513,6 @@ class Dataset(typing.Sequence[TaggedImage]):
                 reverse=True,
             ), top)
         }
-
-
-attrs.resolve_types(TaggedImage)
-attrs.resolve_types(Dataset)
 
 
 __all__ = [
