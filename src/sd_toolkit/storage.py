@@ -1,10 +1,10 @@
 import typing
 import pathlib
-import cbor2
-from cattrs.preconf import cbor2 as cattrs_cbor2
 from compression.zstd import ZstdFile
 from contextlib import nullcontext
 
+import cbor2
+import cattrs.preconf.cbor2 as cattrs_cbor2
 from xxhash import xxh3_128
 from loguru import logger
 

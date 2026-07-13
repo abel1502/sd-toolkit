@@ -14,7 +14,7 @@ from sd_toolkit.dataset import Dataset, img_gallery_dl_post, TaggedImage
 from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming, FlatNaming, SequentialNaming
 from sd_toolkit.misc import ipython_show_multiline_strings
-from sd_toolkit.widget import TaggerWidget, TagGroup
+from sd_toolkit.widgets import TaggerWidget, TagGroup
 from sd_toolkit.gallery_dl import BaseGalleryDLPost, DanbooruPost, PixivPost
 # Not re-exported here: sd_toolkit.diff, sd_toolkit.storage
 # TODO: sd_toolkit.bdtm_ai_api

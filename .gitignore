@@ -4,5 +4,5 @@ __pycache__
 /old
 __marimo__
 node_modules
-/src/sd_toolkit/static
+/src/sd_toolkit/widgets/static
 

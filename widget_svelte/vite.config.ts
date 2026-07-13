@@ -13,7 +13,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   build: {
-    outDir: resolve(__dirname, "../src/sd_toolkit/static"),
+    outDir: resolve(__dirname, "../src/sd_toolkit/widgets/static"),
     lib: {
       entry: {
         tagger: resolve(__dirname, "./src/_tagger.ts"),

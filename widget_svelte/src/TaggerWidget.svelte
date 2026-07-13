@@ -40,6 +40,7 @@
   function toggleTag(event: ToggleTagEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
     model?.send({
+      kind: "custom",
       type: "toggle_tag",
       ...event,
     });
@@ -48,6 +49,7 @@
   function toggleGroup(event: ToggleGroupEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
     model?.send({
+      kind: "custom",
       type: "toggle_group",
       ...event,
     });
@@ -58,6 +60,7 @@
     event.idx = Math.max(0, Math.min(event.idx, totalImages));
 
     model?.send({
+      kind: "custom",
       type: "switch_image",
       ...event,
     });
@@ -73,12 +76,14 @@
 
   function revertImage() {
     model?.send({
+      kind: "custom",
       type: "revert_image",
     });
   }
 
   function viewImage() {
     model?.send({
+      kind: "custom",
       type: "view_image",
     })
   }

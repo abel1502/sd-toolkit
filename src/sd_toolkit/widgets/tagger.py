@@ -10,6 +10,7 @@ import os
 import subprocess
 
 import anywidget
+import ipywidgets
 import traitlets
 import attrs
 from attrs import define, field
@@ -21,9 +22,7 @@ import cachetools
 from sd_toolkit.tags import Tag, TagLike, Tags, TagsLike
 from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.storage import load, save
-
-
-STATIC: typing.Final[pathlib.Path] = pathlib.Path(__file__).parent / "static"
+from sd_toolkit.widgets.base import STATIC, Messages, command, BaseWidget
 
 
 @define
@@ -197,56 +196,30 @@ class SavedChoices:
         return image.path in self._image_choices
 
 
-MESSAGES: dict[str, type[typing.Any]] = {}
-
-def _register_msg[T: type[typing.Any]](name: str) -> typing.Callable[[T], T]:
-    def decorator(cls: T) -> T:
-        MESSAGES[name] = cls
-        cls.MESSAGE_TYPE = name
-        return cls
-    return decorator
-
-@_register_msg("toggle_tag")
 @define
 class ToggleTagMessage:
     path: tuple[str, ...]
     present: bool
 
-@_register_msg("toggle_group")
 @define
 class ToggleGroupMessage:
     idx: int
     present: bool
 
-@_register_msg("switch_image")
 @define
 class SwitchImageMessage:
     idx: int
 
-@_register_msg("revert_image")
 @define
 class RevertImageMessage:
     pass
 
-@_register_msg("view_image")
 @define
 class ViewImageMessage:
     pass
 
 
-def serialize_message(message: typing.Any) -> typing.Mapping[str, typing.Any]:
-    result = cattrs.unstructure(message)
-    result["type"] = message.MESSAGE_TYPE
-    return result
-
-def deserialize_message(data: typing.Mapping[str, typing.Any]) -> typing.Any:
-    return cattrs.structure(data, MESSAGES[data["type"]])
-
-
-_Callback = typing.Callable[[typing.Mapping[str, typing.Any]], typing.Any]
-
-
-class TaggerWidget(anywidget.AnyWidget):
+class TaggerWidget(BaseWidget):
     _esm = STATIC / "tagger.js"
     _css = STATIC / "styles.css"
     
@@ -276,7 +249,7 @@ class TaggerWidget(anywidget.AnyWidget):
         skip_reviewed: bool = True,
         auto_hotkeys: typing.Literal["top_level", "all", "none"] = "none",
         auto_promote: bool = False,
-        out_capture: typing.Callable[[_Callback], _Callback] = lambda f: f,
+        out: ipywidgets.Output | None = None,
     ):
         """
         :param dataset: The images to tag.
@@ -338,11 +311,10 @@ class TaggerWidget(anywidget.AnyWidget):
         super().__init__(
             tag_groups=self._convert_groups(groups, auto_hotkeys),
             image_count=len(dataset),
+            out=out,
         )
         
         self.load_image(starting_idx)
-        
-        self.on_msg(out_capture(TaggerWidget._on_msg))
     
     @staticmethod
     def _convert_groups(
@@ -395,48 +367,42 @@ class TaggerWidget(anywidget.AnyWidget):
         
         return tag_groups
     
-    def _on_msg(self, data: typing.Mapping[str, typing.Any], buffers: list[bytes]) -> None:
-        msg = deserialize_message(data)
-        
-        match msg:
-            case ToggleTagMessage():
-                self._do_toggle_tag(msg)
-            case ToggleGroupMessage():
-                self._do_toggle_group(msg)
-            case SwitchImageMessage():
-                self._do_switch_image(msg)
-            case RevertImageMessage():
-                self._do_revert_image(msg)
-            case ViewImageMessage():
-                self._do_view_image(msg)
-            case _:
-                assert False
+    messages: typing.ClassVar[Messages] = Messages()
+    messages.register_messages(dict(
+        toggle_tag=ToggleTagMessage,
+        toggle_group=ToggleGroupMessage,
+        switch_image=SwitchImageMessage,
+        revert_image=RevertImageMessage,
+        view_image=ViewImageMessage,
+    ))
     
-    def _do_toggle_tag(self, event: ToggleTagMessage) -> None:
-        logger.debug(f"Toggle tag {event}")
+    @messages.register_handler
+    def _do_toggle_tag(self, msg: ToggleTagMessage) -> None:
+        logger.debug(f"Toggle tag {msg}")
         
         image = self.current_image
         if image is None:
             return
         
-        if event.present:
-            image.tags.add(Tag(event.path))
+        if msg.present:
+            image.tags.add(Tag(msg.path))
         else:
-            image.tags.remove(Tag(event.path))
+            image.tags.remove(Tag(msg.path))
         
         self._refresh_tags()
         self._record_choices(image)
     
-    def _do_toggle_group(self, event: ToggleGroupMessage) -> None:
-        logger.debug(f"Toggle group {event}")
+    @messages.register_handler
+    def _do_toggle_group(self, msg: ToggleGroupMessage) -> None:
+        logger.debug(f"Toggle group {msg}")
         
         image = self.current_image
         if image is None:
             return
         
-        group_tags = [tag.path for tag in self.tag_groups[event.idx].tags]
+        group_tags = [tag.path for tag in self.tag_groups[msg.idx].tags]
         
-        if event.present:
+        if msg.present:
             image.tags.add(group_tags)
         else:
             image.tags.remove(group_tags)
@@ -444,26 +410,28 @@ class TaggerWidget(anywidget.AnyWidget):
         self._refresh_tags()
         self._record_choices(image)
     
-    def _do_switch_image(self, event: SwitchImageMessage) -> None:
-        logger.debug(f"Switch image {event}")
+    @messages.register_handler
+    def _do_switch_image(self, msg: SwitchImageMessage) -> None:
+        logger.debug(f"Switch image {msg}")
         
         with self.hold_sync():
             prev_image = self.current_image
             
-            if event.idx in range(self.image_count):
-                self.load_image(event.idx)
+            if msg.idx in range(self.image_count):
+                self.load_image(msg.idx)
             else:
                 # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
                 self.image = ""
-                self.image_idx = event.idx
+                self.image_idx = msg.idx
                 self.image_saved = False
         
         # TODO: Should apply when advancing to next image after looking, but not when skimming through quickly...
         if prev_image is not None:
             self._record_choices(prev_image)
     
-    def _do_revert_image(self, event: RevertImageMessage) -> None:
-        logger.debug(f"Revert image {event}")
+    @messages.register_handler
+    def _do_revert_image(self, msg: RevertImageMessage) -> None:
+        logger.debug(f"Revert image {msg}")
         
         image = self.current_image
         if image is None:
@@ -476,6 +444,7 @@ class TaggerWidget(anywidget.AnyWidget):
         self._refresh_tags()
         self.image_saved = False
     
+    @messages.register_handler
     def _do_view_image(self, event: ViewImageMessage) -> None:
         logger.debug(f"View image {event}")
         
