@@ -1,6 +1,6 @@
 import typing
 from abc import ABC, abstractmethod
-import pathlib
+import inspect
 
 from pydantic import BaseModel
 
@@ -13,9 +13,10 @@ class BaseGalleryDLPost(BaseModel, ABC):
     REGISTRY: typing.ClassVar[typing.Final[dict[str, typing.Type[BaseGalleryDLPost]]]] = {}
     
     def __init_subclass__(cls, *, name: str | None = None, **kwargs) -> None:
+        if inspect.isabstract(cls) != (name is not None):
+            raise TypeError(f"A post class should either be abstract or have a name, but not both.")
+        
         cls.ORIGIN_NAME = name
-        # import inspect
-        # print(f"!!! {cls.__name__} has origin name {cls.ORIGIN_NAME}\n{'\n'.join(f">> {frame.filename}:{frame.lineno} {frame.function}()" for frame in inspect.stack())}")
         
         if name is not None:
             cls.REGISTRY[name] = cls
