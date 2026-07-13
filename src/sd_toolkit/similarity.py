@@ -107,14 +107,8 @@ class PhotoDNAHash(ImageVisualHash[photo_dna_rs.Hash]):
         return np.array(list(hash.as_bytes()), dtype=np.uint8)
 
 
-@CBOR_CONVERTER.register_structure_hook
-def _structure_photo_dna_rs_Hash(data: bytes, cls: typing.Type[photo_dna_rs.Hash]) -> photo_dna_rs.Hash:
-    return cls.from_bytes(data)
-
-
-@CBOR_CONVERTER.register_unstructure_hook
-def _unstructure_photo_dna_rs_Hash(data: photo_dna_rs.Hash) -> bytes:
-    return data.as_bytes()
+CBOR_CONVERTER.register_structure_hook(photo_dna_rs.Hash, photo_dna_rs.Hash.from_bytes)
+CBOR_CONVERTER.register_unstructure_hook(photo_dna_rs.Hash, photo_dna_rs.Hash.as_bytes)
 
 
 __all__ = [
