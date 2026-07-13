@@ -19,11 +19,18 @@ from sd_toolkit.storage import CBOR_CONVERTER
 # TODO:
 # - Rework the interface here?
 # - Downscale/crop/discard large images.
+# - Allow configuring the image viewer app!
 # - Widget to simply view the images in a dataset
 #   - Unlike tagger widget, this can preload and show the adjacent images.
 # - Widget to select a subset of images in a dataset (and get the set of their paths)
 #   - As with tagger widget, save progress to a file, load, offer to re-review previously unseen images
-#   - Could be implemented in terms of tagger widget (a "to_remove" tag), though that's a bit crude
+#   - Also include functionality to add derived images to the dataset:
+#     - Crops: select region in the UI (or programmaticlly?)
+#     - Manual editing: open in Krita (or another configured app). Creates a copy first, then opens Krita. When you done, you tell the UI as much.
+#     - In both cases, new image is saved in a designated folder with a name derived from the original. (perhaps a random suffix like `_a84f6d`) The new TaggedImage is added to a list, which can be turned into another `Dataset` once you're done.
+#     - In the viewer, added images must be immedialely present and connected to the parent image. Should be selectable, and unlike core images should also be deletable.
+#   - Order images so that clusters of similar ones are adjacent! Allows to perform duplicate elimination at the same time as dataset selection.
+#   - In this one and the tagger widget, add a panel with additional information (file path, dimensions, TaggedImage metadata, full tags string). Make it an openable panel above the navbar? Open with an (i) button on the image?
 # - Also some way of looking up images in a dataset by their path.
 #   - Honestly, maybe do make the dataset's contents a nanotable.Table, just don't index on anything but path...?
 #   - I kinda care about order though (Or do I? Sorted on path could be fine, and I could always sort the list form instead.)
