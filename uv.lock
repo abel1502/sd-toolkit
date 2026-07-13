@@ -306,6 +306,15 @@ wheels = [
 ]
 
 [[package]]
+name = "deepmerge"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2a/78/6e9e20106224083cfb817d2d3c26e80e72258d617b616721a169b87081e0/deepmerge-2.1.0.tar.gz", hash = "sha256:07ca7a7b8935df596c512fa8161877c0487ac61f691c07766e7d71d2b23bdd2f", size = 21449, upload-time = "2026-06-22T05:46:07.669Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/25/2a75b47cb057b1e164c604fb81ab690a6cdb5e2260ce651194eae90f64a3/deepmerge-2.1.0-py3-none-any.whl", hash = "sha256:8f148339a91d680a75ecb74ade235d9e759a93df373a0b04e9d31c8666cfeb75", size = 14345, upload-time = "2026-06-22T05:46:06.742Z" },
+]
+
+[[package]]
 name = "duckdb"
 version = "1.5.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1207,6 +1216,7 @@ dependencies = [
     { name = "cattrs", extra = ["cbor2", "orjson"] },
     { name = "cbor2" },
     { name = "data-url" },
+    { name = "deepmerge" },
     { name = "frozendict" },
     { name = "imagehash" },
     { name = "ipykernel" },
@@ -1250,6 +1260,7 @@ requires-dist = [
     { name = "cattrs", extras = ["cbor2", "orjson"], specifier = ">=26.1.0" },
     { name = "cbor2", specifier = ">=6.1.2" },
     { name = "data-url", specifier = ">=1.3.1" },
+    { name = "deepmerge", specifier = ">=2.1.0" },
     { name = "frozendict", specifier = ">=2.4.7" },
     { name = "imagehash", specifier = ">=4.3.2" },
     { name = "ipykernel", specifier = ">=7.3.0" },
