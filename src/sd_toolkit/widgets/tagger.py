@@ -30,7 +30,6 @@ class TagInfo:
     tag: str
     path: tuple[str, ...]
     path_str: str
-    present: bool
 
 
 @define
@@ -226,11 +225,11 @@ class TaggerWidget(BaseWidget):
     # Traitlets (Py -> JS)
     image: str = traitlets.Unicode("").tag(sync=True)
     image_saved: bool = traitlets.Bool(False).tag(sync=True)
-    # TODO: Separate group structure and the presence/absence of tags?
-    tag_groups: typing.Sequence[TagGroupInfo] = traitlets.List([]).tag(
+    tag_groups: list[TagGroupInfo] = traitlets.List(default_value=[]).tag(
         sync=True,
-        **_use_cattrs(typing.Sequence[TagGroupInfo]),
+        **_use_cattrs(list[TagGroupInfo]),
     )
+    tag_presence: dict[str, bool] = traitlets.Dict(default_value={}).tag(sync=True)
     image_idx: int = traitlets.Int(0).tag(sync=True)
     image_count: int = traitlets.Int(0).tag(sync=True)
     
@@ -292,7 +291,7 @@ class TaggerWidget(BaseWidget):
             self._choices = SavedChoices(combined_tags)
             self._saved_choices_path = None
         
-        # TODO: Soft-skip instead:
+        # TODO: Soft-skip:
         # - Show tickmarks on images that have already been reviewed (including during the current session).
         # - Make next and prev skip reviewed images by default, but visit them if shift is held.
         #   - This would make prev go back to the very beginning every time, though.
@@ -352,7 +351,6 @@ class TaggerWidget(BaseWidget):
                         tag=tag.tag,
                         path=tag.path,
                         path_str=tag.to_hierarchical_str(),
-                        present=False,
                     )
                     for tag in group_def._tags
                 ],
@@ -469,13 +467,13 @@ class TaggerWidget(BaseWidget):
         if image is None:
             return
         
-        # TODO: Separate group structure from tag status?
-        tag_groups = copy.deepcopy(self.tag_groups)
-        for group in tag_groups:
-            for tag in group.tags:
-                tag.present = image.tags.has(tag.path)
+        tag_presence: dict[str, bool] = {}
         
-        self.tag_groups = tag_groups
+        for group in self.tag_groups:
+            for tag in group.tags:
+                tag_presence[tag.path_str] = image.tags.has(tag.path)
+        
+        self.tag_presence = tag_presence
     
     def _record_choices(self, image: TaggedImage) -> bool:
         tags_changed = self._choices.record(image)

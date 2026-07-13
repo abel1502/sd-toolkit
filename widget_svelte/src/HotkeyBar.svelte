@@ -6,6 +6,7 @@
 
   interface Props {
     tagGroups: TagGroupInfo[];
+    tagPresence: Record<string, boolean>;
     toggleGroup: (event: ToggleGroupEvent) => void;
     nextImage: () => void;
     prevImage: () => void;
@@ -13,12 +14,12 @@
     class?: string;
   };
 
-  let { tagGroups, toggleGroup, nextImage, prevImage, revertImage, class: extraClass = "" }: Props = $props();
+  let { tagGroups, tagPresence, toggleGroup, nextImage, prevImage, revertImage, class: extraClass = "" }: Props = $props();
 
   let hotkeysEnabled = $state(false);
 
   function handleGroupToggle(event: ShortcutEventDetail) {
-    console.log("Group toggle");
+    // TODO: Find button and toggle click instead?
     let hotkey = event.trigger.code!.at(-1)!.toLowerCase();
 
     let idx = tagGroups.findIndex(g => g.hotkey?.toLowerCase() === hotkey);
@@ -32,15 +33,13 @@
       } else if (event.originalEvent.ctrlKey) {
         present = false;
       } else {
-        present = !isGroupPresent(group);
+        present = !isGroupPresent(group, tagPresence);
       }
 
       console.log(`Toggling group ${idx} to ${present}`);
       toggleGroup({ idx, present });
       event.originalEvent.preventDefault();
     }
-
-    console.log("Group toggle done");
   }
 
   function handleNextImage(event: ShortcutEventDetail) {

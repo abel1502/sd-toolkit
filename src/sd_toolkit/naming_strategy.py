@@ -4,6 +4,7 @@ import pathlib
 from attrs import define, field
 
 
+# TODO: Rework to accept the actual image object?
 class NamingStrategy(typing.Protocol):
     """
     A callable that decides the destination path based on the destination root and the relative source path.

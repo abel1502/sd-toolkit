@@ -8,13 +8,14 @@
   interface Props {
     idx: number;
     tagGroup: TagGroupInfo;
+    tagPresence: Record<string, boolean>;
     toggleGroup: (event: ToggleGroupEvent) => void;
     toggleTag: (event: ToggleTagEvent) => void;
   };
 
-  let { idx, tagGroup, toggleGroup, toggleTag }: Props = $props();
+  let { idx, tagGroup, tagPresence, toggleGroup, toggleTag }: Props = $props();
 
-  let groupPresent = $derived(isGroupPresent(tagGroup));
+  let groupPresent = $derived(isGroupPresent(tagGroup, tagPresence));
 </script>
 
 
@@ -42,6 +43,6 @@
   </button>
   
   {#each tagGroup.tags as tag (tag.path_str)}
-    <TagPill tag={tag} {toggleTag} />
+    <TagPill {tag} present={tagPresence[tag.path_str]} {toggleTag} />
   {/each}
 </div>

@@ -19,6 +19,7 @@
     model: AnyModel<{
       image: string;
       tag_groups: TagGroupInfo[];
+      tag_presence: Record<string, boolean>;
       image_idx: number;
       image_count: number;
       image_saved: boolean;
@@ -42,6 +43,14 @@
   bindTrait({
     model,
     trait: "tag_groups",
+    get: () => tagGroups,
+    set: (value) => (tagGroups = value),
+  })
+
+  let tagPresence = $state(model.get("tag_presence"));
+  bindTrait({
+    model,
+    trait: "tag_presence",
     get: () => tagGroups,
     set: (value) => (tagGroups = value),
   })
@@ -91,9 +100,9 @@
   }
 
   function goToImage(event: SwitchImageEvent) {
-    // TODO: Add a spinner while waiting for updates from python somehow?
     event.idx = Math.max(0, Math.min(event.idx, totalImages));
 
+    // TODO: Toggle a spinner until image changes?
     model.send({
       kind: "custom",
       type: "switch_image",
@@ -152,12 +161,12 @@
       ]} />
 
 <div class="flex-1 py-1 overflow-y-auto scrollbar-hidden">
-    <TagsPanel {tagGroups} {toggleGroup} {toggleTag} />
+    <TagsPanel {tagGroups} {tagPresence} {toggleGroup} {toggleTag} />
 </div>
 </div>
   {/if}
 
   <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} {nextImage} {prevImage} />
 
-<HotkeyBar class="mt-4" {tagGroups} {toggleGroup} {nextImage} {prevImage} {revertImage} />
+<HotkeyBar class="mt-4" {tagGroups} {tagPresence} {toggleGroup} {nextImage} {prevImage} {revertImage} />
 </div>
