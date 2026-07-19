@@ -13,7 +13,7 @@ class BaseGalleryDLPost(BaseModel, ABC):
     REGISTRY: typing.ClassVar[typing.Final[dict[str, typing.Type[BaseGalleryDLPost]]]] = {}
     
     def __init_subclass__(cls, *, name: str | None = None, **kwargs) -> None:
-        if inspect.isabstract(cls) != (name is not None):
+        if inspect.isabstract(cls) != (name is None):
             raise TypeError(f"A post class should either be abstract or have a name, but not both.")
         
         cls.ORIGIN_NAME = name
@@ -21,7 +21,7 @@ class BaseGalleryDLPost(BaseModel, ABC):
         if name is not None:
             cls.REGISTRY[name] = cls
         
-        return super().__init_subclass__(**kwargs)
+        super().__init_subclass__(**kwargs)
     
     def extract_tags(self) -> Tags:
         if self.ORIGIN_NAME is None:

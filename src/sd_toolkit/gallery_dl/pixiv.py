@@ -138,7 +138,7 @@ class PixivPost(BaseGalleryDLPost, name="pixiv"):
     hash: str
     
     @typing.override
-    def extract_tags(self) -> TagsLike:
+    def _extract_tags(self) -> TagsLike:
         return [
             Tag(tag.name)
             for tag in self.tags
