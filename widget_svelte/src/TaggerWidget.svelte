@@ -51,8 +51,8 @@
   bindTrait({
     model,
     trait: "tag_presence",
-    get: () => tagGroups,
-    set: (value) => (tagGroups = value),
+    get: () => tagPresence,
+    set: (value) => (tagPresence = value),
   })
 
   let curImageIdx = $state(model.get("image_idx"));

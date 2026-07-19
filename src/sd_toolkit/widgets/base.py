@@ -115,7 +115,7 @@ class Messages:
             raise ValueError(f"Expected a JSON dictionary, got {type(data)!r}.")
         
         msg = self.deserialize(data)
-        msg_type: str = msg.MESSAGE_TYPE
+        msg_type: str = msg._MESSAGE_TYPE_
         
         handler = self._handlers.get(msg_type, None)
         if handler is None:
@@ -196,24 +196,26 @@ class BaseWidget(anywidget.AnyWidget):
     ):
         super().__init__(*args, **kwargs)
         
-        def _msg_handler(data: JSON, buffers: Buffers) -> None:
-            if not isinstance(data, dict) or data["kind"] != "custom":
-                return
-            
-            for cls in type(self).__mro__:
-                if (
-                    issubclass(cls, BaseWidget) and
-                    "messages" in vars(cls) and
-                    cls.messages.handle(data, self)
-                ):
-                    return
-            
-            raise ValueError(f"No handler is registered for message {data!r}.")
+        msg_handler = BaseWidget._msg_handler
         
         if out is not None:
-            _msg_handler = out.capture()(_msg_handler)
+            msg_handler = out.capture()(msg_handler)
         
-        self.on_msg(_msg_handler)
+        self.on_msg(msg_handler)
+    
+    def _msg_handler(self: BaseWidget, data: JSON, buffers: Buffers) -> None:
+        if not isinstance(data, dict) or data["kind"] != "custom":
+            return
+        
+        for cls in type(self).__mro__:
+            if (
+                issubclass(cls, BaseWidget) and
+                "messages" in vars(cls) and
+                cls.messages.handle(data, self)
+            ):
+                return
+        
+        raise ValueError(f"No handler is registered for message {data!r}.")
 
 
 __all__ = [

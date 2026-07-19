@@ -344,7 +344,7 @@ class TaggerWidget(BaseWidget):
         else:
             raise ValueError(f"Invalid option for auto_hotkeys: {auto_hotkeys!r}")
         
-        tag_groups = [
+        return [
             TagGroupInfo(
                 tags=[
                     TagInfo(
@@ -362,8 +362,6 @@ class TaggerWidget(BaseWidget):
                 for group in groups
             )
         ]
-        
-        return tag_groups
     
     messages: typing.ClassVar[Messages] = Messages()
     messages.register_messages(dict(
