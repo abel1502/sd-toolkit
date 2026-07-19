@@ -1,8 +1,10 @@
 <script lang="ts">
   import { Confetti } from "svelte-confetti";
   import { slide } from "svelte/transition";
-  import ArrowsReload01 from "@iconify-svelte/ci/arrows-reload-01";
-  import MagnifyingGlassPlus from "@iconify-svelte/ci/magnifying-glass-plus";
+  import IconSave from "@lucide/svelte/icons/save";
+  import IconSaveOff from "@lucide/svelte/icons/save-off";
+  import IconRotateCCW from "@lucide/svelte/icons/rotate-ccw";
+  import IconZoomIn from "@lucide/svelte/icons/zoom-in";
   import { untrack } from "svelte";
   import type { AnyModel, Experimental } from "./anywidget.svelte";
   import { bindTrait } from "./anywidget.svelte";
@@ -133,40 +135,47 @@
   }
 
   let width: number | undefined = $state();
+
+  // TODO: Wire up
+  let autoSaveUnchanged: boolean = $state(true);
 </script>
 
 
-  <div class="flex flex-col w-full resize-x min-w-2xl max-w-full p-4 border rounded-lg bg-white shadow-sm overflow-hidden" bind:clientWidth={width}
->
+<div class="flex flex-col w-full resize-x min-w-2xl max-w-full p-4 border rounded-lg bg-white shadow-sm overflow-hidden" bind:clientWidth={width}>
   {#if is_done}
     <div class="grid place-items-center h-16 border border-green-300 p-4 rounded-lg bg-green-200 shadow-sm">
       {#if totalImages > 0}
-    <Confetti x={[-width / 400.0, width / 400.0]} y={[-0.5, 0.25]} amount={100} />
+        <Confetti x={[-width / 400.0, width / 400.0]} y={[-0.5, 0.25]} amount={100} />
       {/if}
       <span class="text-green-800 font-bold absolute">Done!</span>
-  </div>
+    </div>
   {:else}
-  <div class="flex flex-row gap-6 resize-y min-h-48 h-64 overflow-hidden" transition:slide>
-<ImagePreview class="h-full max-h-[35vw]" {image} {imageSaved} buttons={[
+    <div class="flex flex-row gap-6 resize-y min-h-48 h-64 overflow-hidden" transition:slide>
+      <ImagePreview class="h-full max-h-[35vw]" {image} {imageSaved} buttons={[
         {
-          icon: ArrowsReload01,
+          icon: autoSaveUnchanged ? IconSave : IconSaveOff,
+          title: (autoSaveUnchanged ? "Disable" : "Enable") + " saving unchanged images",
+          onclick: () => { autoSaveUnchanged = !autoSaveUnchanged },
+        },
+        {
+          icon: IconRotateCCW,
           title: "Reset image tags",
           onclick: revertImage,
         },
         {
-          icon: MagnifyingGlassPlus,
+          icon: IconZoomIn,
           title: "Open in external viewer",
           onclick: viewImage,
-        }
+        },
       ]} />
 
-<div class="flex-1 py-1 overflow-y-auto scrollbar-hidden">
-    <TagsPanel {tagGroups} {tagPresence} {toggleGroup} {toggleTag} />
-</div>
-</div>
+      <div class="flex-1 py-1 overflow-y-auto scrollbar-hidden">
+          <TagsPanel {tagGroups} {tagPresence} {toggleGroup} {toggleTag} />
+      </div>
+    </div>
   {/if}
 
   <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} {nextImage} {prevImage} />
 
-<HotkeyBar class="mt-4" {tagGroups} {tagPresence} {toggleGroup} {nextImage} {prevImage} {revertImage} />
+  <HotkeyBar class="mt-4" {tagGroups} {tagPresence} {toggleGroup} {nextImage} {prevImage} {revertImage} />
 </div>

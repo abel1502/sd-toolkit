@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { SwitchImageEvent } from "./types";
-  import ChevronLeft from "@iconify-svelte/ci/chevron-left";
-  import ChevronRight from "@iconify-svelte/ci/chevron-right";
+  import IconChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import IconChevronRight from "@lucide/svelte/icons/chevron-right";
 
   interface Props {
     curImageIdx: number;
@@ -44,7 +44,7 @@
     onclick={prevImage}
     disabled={curImageIdx == 0}
   >
-    <ChevronLeft width="1em" height="1em" class="align-middle" />
+    <IconChevronLeft width="1em" height="1em" class="align-middle" />
     Previous
   </button>
 
@@ -94,7 +94,7 @@
     disabled={curImageIdx == totalImages}
   >
     Next
-    <ChevronRight width="1em" height="1em" class="align-middle" />
+    <IconChevronRight width="1em" height="1em" class="align-middle" />
   </button>
 </div>
 

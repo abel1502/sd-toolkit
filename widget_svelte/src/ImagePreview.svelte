@@ -1,5 +1,5 @@
 <script lang="ts">
-  import WavyCheck from "@iconify-svelte/ci/wavy-check";
+  import IconBadgeCheck from "@lucide/svelte/icons/badge-check";
 
   interface Props {
     image: string;
@@ -24,7 +24,7 @@
 
     {#if imageSaved}
     <div class="absolute top-0 right-0 m-1" title="Image reviewed">
-      <WavyCheck class="align-middle text-green-700 w-8 h-8" />
+      <IconBadgeCheck class="align-middle text-green-700 w-8 h-8" />
     </div>
     {/if}
 

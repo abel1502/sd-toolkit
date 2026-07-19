@@ -80,8 +80,20 @@
         enabled: hotkeysEnabled,
       },
       {
+        code: 'ArrowRight',
+        modifier: 'none',
+        callback: handleNextImage,
+        enabled: hotkeysEnabled,
+      },
+      {
         code: 'Space',
         modifier: 'shift',
+        callback: handlePrevImage,
+        enabled: hotkeysEnabled,
+      },
+      {
+        code: 'ArrowLeft',
+        modifier: 'none',
         callback: handlePrevImage,
         enabled: hotkeysEnabled,
       },

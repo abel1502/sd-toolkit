@@ -1,5 +1,5 @@
 <script lang="ts">
-  import MoreGridSmall from "@iconify-svelte/ci/more-grid-small";
+  import IconGripMini from "./IconGripMini.svelte";
 
   import type { TagGroupInfo, ToggleGroupEvent, ToggleTagEvent } from "./types";
   import { isGroupPresent } from "./utils";
@@ -38,7 +38,7 @@
     {#if tagGroup.hotkey}
       <span class="m-auto text-center font-semibold text-slate-600">{tagGroup.hotkey}</span>
     {:else}
-      <MoreGridSmall width="1em" height="1em" class="m-auto align-middle" />
+      <IconGripMini width="1em" height="1em" class="m-auto align-middle" />
     {/if}
   </button>
   
