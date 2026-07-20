@@ -7,9 +7,19 @@
 
 - [ ] Training supervision module (auto-add `.civitai.info` and `.json`, callback for making previews, copy to _my)
 - [ ] Incorporate `_process_civitai.py`, `_add_metadata.py`, , etc.?
-- [ ] Add the new (to be written) script for converting gallery-dl scrapes into regular dataset tags
-- [ ] Better dataset prep utilities. Maybe use an actual UI instead of the jupyter hacks? Or maybe stick with jupyter, but use my own html or something.
-  - Really need to think of a better way to select a bunch of images
-  - Integrate AI-tagging
-  - Cannibalize traintrain a bit
+- [ ] Really need to think of a better way to select a bunch of images
+- [ ] Integrate AI-tagging
+- [ ] Cannibalize traintrain a bit
 - [ ] ...
+
+
+Immediate priority TODO:
+- [ ] Use for CoolerInker style lora for anima
+  - Preprocess dataset with the toolkit
+  - Launch a training session
+- [ ] Training process integration: store and write out configs at least
+- [ ] Add image view widget (maybe use it as default preview for images and datasets)
+- [ ] Add image selection widget (store yes/no choice for all images, configurable default, 
+      plus allow creating new ones -- for now simply by making a copy and opening it in krita for editing)
+- [ ] Fix preview generation on anima in easy training scripts.
+
