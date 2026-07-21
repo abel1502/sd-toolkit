@@ -5,6 +5,7 @@
 - [ ] Incorporate `_process_civitai.py`, `_add_metadata.py`, , etc.?
 - [ ] Integrate AI-tagging
 - [ ] Cannibalize traintrain a bit
+- [ ] Something like ~/.config/sd_toolkit.profile.py to hold my own preferred configuration?
 - [ ] ...
 
 
