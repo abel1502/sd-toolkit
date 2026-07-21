@@ -128,7 +128,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             if tags_file is None:
                 logger.info(f"Image {img_file} has no tags")
             
-            tags: Tags = Tags.parse_plain(tags_file.read_text(), separator=tag_separator) if tags_file else Tags()
+            tags: Tags = Tags.parse_plain(tags_file.read_text(), sep=tag_separator) if tags_file else Tags()
             
             logger.debug(f"Loading image {img_file} with tags {tags!r}")
             
