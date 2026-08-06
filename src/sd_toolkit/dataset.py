@@ -13,6 +13,7 @@ from loguru import logger
 import attrs
 from attrs import define, field
 import ipywidgets
+import rich.console
 
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
@@ -320,6 +321,28 @@ class Dataset(typing.Sequence[TaggedImage]):
     def reload_checkpoint(self, path: pathlib.Path | str) -> None:
         restored = self.load_checkpoint(path)
         self._assign_from(restored)
+    
+    def checkpoint(self, path: pathlib.Path | str, *, overwrite: bool = False, test: bool = False, diff: bool = False) -> None:
+        if isinstance(path, str):
+            path = pathlib.Path(path)
+        
+        if not path.exists():
+            if test:
+                raise ValueError(f"Checkpoint file {path} does not exist")
+            
+            return self.save_checkpoint(path)
+        
+        if overwrite:
+            return self.save_checkpoint(path, overwrite=True)
+        
+        saved = self.load_checkpoint(path)
+        
+        if test and saved != self:
+            if diff:
+                rich.console.Console().print(self.diff(saved).pprint(hide_unchanged=True))
+            raise ValueError(f"Saved checkpoint at {path} does not match the current dataset")
+        
+        self._assign_from(saved)
     
     def _assign_from(self, other: Dataset) -> None:
         for field in attrs.fields(Dataset):
