@@ -212,11 +212,11 @@ class DatasetDiff:
             
             formatted: RichText
             if image.metadata[diff_added]:
-                formatted = RichText.from_markup(f">> [green]+{image.path}[/]")
+                formatted = RichText.from_markup(f">> [green]+{image.path}[/]\n")
             elif image.metadata[diff_removed]:
-                formatted = RichText.from_markup(f">> [red]-{image.path}[/]")
+                formatted = RichText.from_markup(f">> [red]-{image.path}[/]\n")
             elif image.metadata[diff_changed_metadata]:
-                formatted = RichText.from_markup(f">> [yellow]~{image.path}[/]")
+                formatted = RichText.from_markup(f">> [yellow]~{image.path}[/]\n")
             else:
                 formatted = RichText(f">> {image.path}\n")
             
