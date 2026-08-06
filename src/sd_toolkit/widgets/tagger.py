@@ -218,6 +218,10 @@ class ViewImageMessage:
     pass
 
 
+# TODO: Metadata on tags is handled inconsistently! Fix!
+# - The interactive pass discards the metadata on every tag the user touches, because it takes the tag string from the front-end message.
+# - The non-interactive pass applies the metadata as it is in the tag group definitions.
+# This is good for some metadata, like tag confidence, but bad for stuff like tag danbooru category.
 class TaggerWidget(BaseWidget):
     _esm = STATIC / "tagger.js"
     _css = STATIC / "styles.css"
