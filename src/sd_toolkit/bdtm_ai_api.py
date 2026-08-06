@@ -118,11 +118,11 @@ class ConfigResponse:
 
 _converter = cattrs.Converter()
 
-@_converter.register_unstructure_hook(bytes)
+@_converter.register_unstructure_hook
 def _unstructure_bytes(value: bytes) -> str:
     return base64.b64encode(value).decode("ascii")
 
-@_converter.register_structure_hook(bytes)
+@_converter.register_structure_hook
 def _structure_bytes(value: typing.Any, _: type[bytes]) -> bytes:
     if isinstance(value, bytes):
         return value
@@ -130,11 +130,11 @@ def _structure_bytes(value: typing.Any, _: type[bytes]) -> bytes:
         return base64.b64decode(value.encode("ascii"))
     raise TypeError(f"Expected base64 string or bytes, got {type(value)!r}")
 
-@_converter.register_unstructure_hook(ObjectDataType)
+@_converter.register_unstructure_hook
 def _unstructure_object_data_type(value: ObjectDataType) -> int:
     return value.value
 
-@_converter.register_structure_hook(ObjectDataType)
+@_converter.register_structure_hook
 def _structure_object_data_type(value: typing.Any, _: type[ObjectDataType]) -> ObjectDataType:
     if isinstance(value, ObjectDataType):
         return value
