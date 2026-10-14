@@ -177,7 +177,7 @@ class Tags:
     
     @classmethod
     def parse_plain(cls, text: str, *, sep: str = ",") -> Tags:
-        return cls(filter(None, map(str.strip, text.split(sep))))
+        return cls(set(filter(None, map(str.strip, text.split(sep)))))
     
     def to_plain(
         self,
