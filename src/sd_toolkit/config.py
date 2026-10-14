@@ -53,13 +53,17 @@ class Config(abc.ABC):
     def __init__(self) -> None:
         pass
     
-    pass
+    @abc.abstractmethod
+    def bdtm_ai_api_location(self) -> pathlib.Path | None:
+        ...
     
     # TODO: Danbooru tags table(s)
 
 
 class DummyConfig(Config):
-    pass
+    @typing.override
+    def bdtm_ai_api_location(self) -> pathlib.Path | None:
+        return None
 
 
 __all__ = [

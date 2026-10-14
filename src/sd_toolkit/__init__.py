@@ -16,8 +16,9 @@ from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming, FlatNaming
 from sd_toolkit.misc import ipython_show_multiline_strings
 from sd_toolkit.widgets import TaggerWidget, TagGroup
 from sd_toolkit.gallery_dl import BaseGalleryDLPost, DanbooruPost, PixivPost
+from sd_toolkit.config import Config
+from sd_toolkit.autotag import Autotagger, Model
 # Not re-exported here: sd_toolkit.diff, sd_toolkit.storage
-# TODO: sd_toolkit.bdtm_ai_api
 
 __all__ = [
     "TagLike",
@@ -45,4 +46,7 @@ __all__ = [
     "BaseGalleryDLPost",
     "DanbooruPost",
     "PixivPost",
+    "Config",
+    "Autotagger",
+    "Model",
 ]
