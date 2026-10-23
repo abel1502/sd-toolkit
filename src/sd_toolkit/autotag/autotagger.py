@@ -7,6 +7,7 @@ import contextlib
 import attrs
 from attrs import define, field
 from frozendict import frozendict
+from loguru import logger
 
 from sd_toolkit.config import Config
 from sd_toolkit.dataset import Dataset, TaggedImage
@@ -18,10 +19,14 @@ from sd_toolkit.autotag.bdtm_ai_api import BDTMAPIClient
 @define()
 class Autotagger:
     _aiapi: BDTMAPIClient | None = None
+    _process: subprocess.Popen | None = field(default=None, init=False)
     
-    @contextlib.contextmanager
-    def run_ai_api_server(self) -> typing.Generator[typing.Self, None, None]:
-        server_dir = Config.get().bdtm_ai_api_location()
+    def start_server(self) -> None:
+        if self._process is not None:
+            logger.info("BDTM AI API server is already running")
+            return
+        
+        server_dir = Config.get().bdtm_ai_api_location
         if server_dir is None:
             raise RuntimeError("BDTM AI API server location is not configured")
         
@@ -38,16 +43,35 @@ class Autotagger:
         if not python.exists():
             raise RuntimeError(f"BDTM AI API server Python interpreter not found at {python}")
         
-        proc = subprocess.Popen([str(python), str(main_py)])
+        self._process = subprocess.Popen([str(python), str(main_py)], cwd=main_py.parent)
+        self._aiapi = BDTMAPIClient()
         
+        # TODO: Await readiness
+    
+    def stop_server(self) -> None:
+        if self._process is None:
+            logger.info("BDTM AI API server is not running")
+            return
+        
+        self._aiapi = None
+        self._process.kill()
+        self._process.wait(10)
+        self._process.terminate()
+        self._process = None
+    
+    def __del__(self) -> None:
         try:
-            self._aiapi = BDTMAPIClient()
+            self.stop_server()
+        except:
+            pass
+    
+    @contextlib.contextmanager
+    def run_ai_api_server(self) -> typing.Generator[typing.Self, None, None]:
+        try:
+            self.start_server()
             yield self
         finally:
-            self._aiapi = None
-            proc.kill()
-            proc.wait(10)
-            proc.terminate()
+            self.stop_server()
     
     @contextlib.contextmanager
     def connect_to_ai_api_server(self, url: str | None = None, **kwargs) -> typing.Generator[typing.Self, None, None]:
@@ -73,7 +97,7 @@ class Autotagger:
     
     def get_model(self, name: str) -> Model:
         schema = self.aiapi.get_model_params(name)
-        return Model.from_schema(name, schema)
+        return Model.from_schema(name, schema.Parameters)
 
     def autotag_image(self, model: Model, image: TaggedImage, *, origin: str = "ai") -> TaggedImage:
         api_resp = self.aiapi.interrogate_image(
@@ -82,7 +106,7 @@ class Autotagger:
             skip_internet_requests=True,
             serialize_vram_usage=True,
             file_name="",
-            models=[model],
+            models=[model.descriptor],
         )
         
         if not api_resp.Success:
@@ -100,8 +124,8 @@ class Autotagger:
         
         return image
     
-    def autotag_dataset[T: typing.Sequence[TaggedImage]](self, model: Model, dataset: T, *, origin: str = "ai") -> T:
-        for image in dataset:
+    def autotag_dataset[T: typing.Sequence[TaggedImage]](self, model: Model, dataset: T, *, origin: str = "ai", progressbar: typing.Callable[[T], typing.Iterable[TaggedImage]] = lambda x: x) -> T:
+        for image in progressbar(dataset):
             self.autotag_image(model, image, origin=origin)
         
         return dataset
@@ -137,6 +161,13 @@ class Model:
             )
             for parameter in self._default_schema
         ]
+    
+    @property
+    def descriptor(self) -> bdtm_ai_api.ModelParameters:
+        return bdtm_ai_api.ModelParameters(
+            ModelName=self.name,
+            AdditionalParameters=self.schema
+        )
     
     def set(self, **kwargs: typing.Any) -> typing.Self:
         """

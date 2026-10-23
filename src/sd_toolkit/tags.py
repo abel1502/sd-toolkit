@@ -526,13 +526,11 @@ class Tags:
         return self.filter(lambda tag: func(tag.tag))
     
     def map(self, func: typing.Callable[[Tag], TagLike]) -> typing.Self:
-        new: list[Tag] = []
-        
-        for tag in self:
-            new.append(Tag.cast(func(tag)))
-        
+        old: list[Tag] = list(self)
         self._tags.clear()
-        self._tags.extend(new)
+        
+        for tag in old:
+            self.add(Tag.cast(func(tag)))
         
         return self
     
@@ -705,6 +703,8 @@ class Tags:
         return self
     
     # TODO: convert_pixiv_to_booru. Query (and persistently cache!) the danbooru wiki, or optionally ask the user. Or use the scraped aliases dataset.
+    
+    # TODO: convert_ai_to_booru: .map_str(lambda tag: tag.replace(" ", "_").replace("\\(", "(").replace("\\)", ")")) + some extra. Useful for importing from bdtm and uniformity
     
     def prefix_artist_tags(self) -> typing.Self:
         return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag_category.of(tag) == "artist" else tag)

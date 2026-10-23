@@ -1,20 +1,19 @@
 import typing
 import pathlib
-import abc
 import importlib
-import importlib.machinery
 import importlib.util
+import inspect
 
-import attrs
-from attrs import define, field
+from loguru import logger
 
 
-class Config(abc.ABC):
+class Config:
     """
     This class should be extended by the user in ~/.sd_toolkit/config.py in order to specify the confidential configuration for sd_toolkit.
     """
     
-    CONFIG_FILE = pathlib.Path("~/.sd_toolkit/config.py").expanduser()
+    CONFIG_DIR = pathlib.Path("~/.sd_toolkit").expanduser()
+    CONFIG_FILE = CONFIG_DIR / "config.py"
     
     _cached_config: typing.ClassVar[Config | None] = None
     
@@ -28,16 +27,15 @@ class Config(abc.ABC):
     @staticmethod
     def reload() -> None:
         if not Config.CONFIG_FILE.exists():
-            Config._cached_config = DummyConfig()
+            logger.info(f"User configuration file {Config.CONFIG_FILE} not found. Using a dummy default config.")
+            Config._cached_config = Config()
             return
         
-        loader = importlib.machinery.SourceFileLoader("<sd_toolkit user config>", str(Config.CONFIG_FILE))
-        spec = importlib.machinery.ModuleSpec("<sd_toolkit user config>", loader, origin=str(Config.CONFIG_FILE), is_package=False)
-        
-        module = loader.create_module(spec)
+        spec = importlib.util.spec_from_file_location("<sd_toolkit user config>", Config.CONFIG_FILE)
+        module = importlib.util.module_from_spec(spec)
         
         try:
-            loader.exec_module(module)
+            spec.loader.exec_module(module)
         except Exception as e:
             raise RuntimeError(f"Failed to load user configuration file {Config.CONFIG_FILE}") from e
         
@@ -53,17 +51,36 @@ class Config(abc.ABC):
     def __init__(self) -> None:
         pass
     
-    @abc.abstractmethod
-    def bdtm_ai_api_location(self) -> pathlib.Path | None:
-        ...
+    def _fail(self, target: str | None = None) -> typing.NoReturn:
+        if target is None:
+            target = inspect.currentframe().f_back.f_code.co_name
+        
+        raise ValueError(f"{target!r} is not defined in the user configuration file ({Config.CONFIG_FILE})")
+    
+    @property
+    def bdtm_ai_api_location(self) -> pathlib.Path:
+        self._fail()
+    
+    @property
+    def anima_model(self) -> pathlib.Path:
+        self._fail()
+    
+    @property
+    def anima_vae(self) -> pathlib.Path | None:
+        self._fail()
+    
+    @property
+    def anima_te(self) -> pathlib.Path | None:
+        self._fail()
+    
+    @property
+    def training_config_presets_path(self) -> pathlib.Path | None:
+        return self.CONFIG_DIR / "presets"
+    
+    def make_style_sample_prompt(self, trigger: str, *, extra_pos: str = "", extra_neg: str = "") -> str:
+        return f"masterpiece, best quality, {trigger}, {extra_pos} --n {extra_neg} --w 1024 --h 1024 --d 123 --l 4.0 --s 32"
     
     # TODO: Danbooru tags table(s)
-
-
-class DummyConfig(Config):
-    @typing.override
-    def bdtm_ai_api_location(self) -> pathlib.Path | None:
-        return None
 
 
 __all__ = [
