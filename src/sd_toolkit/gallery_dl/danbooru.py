@@ -32,6 +32,32 @@ class MediaAsset(BaseModel):
     variants: list[Variant]
 
 
+class Frame(BaseModel):
+    file: str
+    delay: int
+
+
+class Pool(BaseModel):
+    id: int
+    name: str
+    category: str
+    created_at: datetime
+    updated_at: datetime
+    description: str
+    is_active: bool
+    is_deleted: bool
+    post_count: int
+
+
+class Favgroup(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+    updated_at: datetime
+    creator_id: int
+    is_public: bool
+
+
 class DanbooruPost(BaseGalleryDLPost, name="danbooru"):
     id: int
     created_at: datetime
@@ -115,7 +141,13 @@ class DanbooruPost(BaseGalleryDLPost, name="danbooru"):
     search_tags: str
     category: str
     subcategory: str
-    
+
+    # Optional fields added by specific extractors
+    frames: list[Frame] | None = None
+    num: int | None = None
+    pool: Pool | None = None
+    favgroup: Favgroup | None = None
+
     @typing.override
     def _extract_tags(self) -> TagsLike:
         return [
