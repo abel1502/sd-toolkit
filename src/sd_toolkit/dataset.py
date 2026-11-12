@@ -169,7 +169,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             metadata_file = img_file.with_name(img_file.name + ".json")
             assert metadata_file.is_file()
             
-            post = post_type.model_validate_json(metadata_file.read_text())
+            post = post_type.model_validate_json(metadata_file.read_text(encoding="utf-8"))
             
             image = TaggedImage(
                 path=img_file,
