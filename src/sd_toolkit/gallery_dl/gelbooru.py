@@ -1,7 +1,7 @@
 import typing
 from datetime import datetime
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, BeforeValidator
 
 from sd_toolkit.gallery_dl.base import BaseGalleryDLPost
 from sd_toolkit.tags import Tag, TagsLike, tag_category
@@ -40,7 +40,7 @@ class GelbooruPost(BaseGalleryDLPost, name="gelbooru"):
     has_children: bool
     file_url: HttpUrl
     preview_url: HttpUrl
-    sample_url: HttpUrl
+    sample_url: HttpUrl | typing.Annotated[None, BeforeValidator(lambda x: x or None)] = None  # Why didn't I need this workaround anywhere else? Look into
     sample_height: int
     sample_width: int
     status: str
