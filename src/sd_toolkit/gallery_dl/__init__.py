@@ -4,6 +4,7 @@ from .gelbooru import GelbooruPost
 from .kemono import KemonoPost, PawchivePost
 from .mastodon import BaraagPost, MastodonPost
 from .pixiv import PixivPost
+from .unknown import UnknownPost
 
 
 __all__ = [
@@ -15,4 +16,5 @@ __all__ = [
     "MastodonPost",
     "PawchivePost",
     "PixivPost",
+    "UnknownPost",
 ]
