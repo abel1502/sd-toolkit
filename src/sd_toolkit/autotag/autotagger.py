@@ -1,249 +1,107 @@
 import typing
-import pathlib
-import platform
-import subprocess
-import contextlib
+import copy
+import inspect
+from abc import ABC, abstractmethod
 
-import attrs
-from attrs import define, field
-from frozendict import frozendict
-from loguru import logger
+from attrs import define
 
-from sd_toolkit.config import Config
-from sd_toolkit.dataset import Dataset, TaggedImage
-from sd_toolkit.tags import Tag, TagLike, Tags, TagsLike, tag_confidence, tag_origin
-from sd_toolkit.autotag import bdtm_ai_api
-from sd_toolkit.autotag.bdtm_ai_api import BDTMAPIClient
+from sd_toolkit.dataset import TaggedImage
+from sd_toolkit.tags import Tags
 
 
-@define()
-class Autotagger:
-    _aiapi: BDTMAPIClient | None = None
-    _process: subprocess.Popen | None = field(default=None, init=False)
+@define(kw_only=True)
+class AutotaggerConfig:
+    """
+    Base configuration for an autotagger.
+
+    Configuration objects are passed to the autotagger on every call rather than
+    being bound to the autotagger instance. This makes it possible to use a single
+    autotagger object with different models and settings.
+    """
     
-    def start_server(self) -> None:
-        if self._process is not None:
-            logger.info("BDTM AI API server is already running")
+    origin: str = "ai"
+    """
+    The value to store in the `tag_origin` metadata field of the produced tags.
+    """
+    
+    def clone(self) -> typing.Self:
+        """
+        Returns an independent copy of this configuration.
+        """
+        
+        return copy.deepcopy(self)
+
+
+class Autotagger[ConfigT: AutotaggerConfig](ABC):
+    """
+    Common interface for image autotaggers.
+    
+    The autotagger object represents the backend (e.g. a local model or a remote
+    server), while `AutotaggerConfig` instances describe what to do with a given
+    image (e.g. which model to use and what thresholds to apply).
+    """
+    
+    CONFIG_CLASS: type[ConfigT]
+    
+    def __init_subclass__(cls, **kwargs: typing.Any) -> None:
+        super().__init_subclass__(**kwargs)
+        
+        # inspect.isabstract knows how to handle ABCs that are still being built.
+        if inspect.isabstract(cls):
             return
         
-        server_dir = Config.get().bdtm_ai_api_location
-        if server_dir is None:
-            raise RuntimeError("BDTM AI API server location is not configured")
+        config_class = getattr(cls, "CONFIG_CLASS", None)
         
-        main_py = server_dir / "main.py"
-        if not main_py.exists():
-            raise RuntimeError(f"BDTM AI API server main script not found at {main_py}")
+        if config_class is None:
+            raise TypeError(f"Concrete autotagger {cls.__name__} must define CONFIG_CLASS")
         
-        python: pathlib.Path
-        if platform.system() == "Windows":
-            python = server_dir / "venv/Scripts/python.exe"
-        else:
-            python = server_dir / "venv/bin/python"
-        
-        if not python.exists():
-            raise RuntimeError(f"BDTM AI API server Python interpreter not found at {python}")
-        
-        self._process = subprocess.Popen([str(python), str(main_py)], cwd=main_py.parent)
-        self._aiapi = BDTMAPIClient()
-        
-        # TODO: Await readiness
-    
-    def stop_server(self) -> None:
-        if self._process is None:
-            logger.info("BDTM AI API server is not running")
-            return
-        
-        self._aiapi = None
-        self._process.kill()
-        self._process.wait(10)
-        self._process.terminate()
-        self._process = None
-    
-    def __del__(self) -> None:
-        try:
-            self.stop_server()
-        except:
-            pass
-    
-    @contextlib.contextmanager
-    def run_ai_api_server(self) -> typing.Generator[typing.Self, None, None]:
-        try:
-            self.start_server()
-            yield self
-        finally:
-            self.stop_server()
-    
-    @contextlib.contextmanager
-    def connect_to_ai_api_server(self, url: str | None = None, **kwargs) -> typing.Generator[typing.Self, None, None]:
-        try:
-            self._aiapi = BDTMAPIClient(url, **kwargs)
-            yield self
-        finally:
-            self._aiapi = None
-    
-    @property
-    def aiapi(self) -> BDTMAPIClient:
-        if self._aiapi is None:
-            raise RuntimeError("BDTM AI API server is not running")
-        return self._aiapi
-
-    def available_models(self, *, video: bool = False) -> list[str]:
-        config = self.aiapi.get_config()
-        return [
-            model.ModelName
-            for model in config.Interrogators
-            if not video or model.SupportedVideo
-        ]
-    
-    def get_model(self, name: str) -> Model:
-        schema = self.aiapi.get_model_params(name)
-        return Model.from_schema(name, schema.Parameters)
-
-    def autotag_image(self, model: Model, image: TaggedImage, *, origin: str = "ai") -> TaggedImage:
-        api_resp = self.aiapi.interrogate_image(
-            image.path.read_bytes(),
-            bdtm_ai_api.ObjectDataType.IMAGE_BYTE_ARRAY,
-            skip_internet_requests=True,
-            serialize_vram_usage=True,
-            file_name="",
-            models=[model.descriptor],
-        )
-        
-        if not api_resp.Success:
-            raise RuntimeError(f"API interrogate failed: {api_resp.ErrorMessage}")
-        
-        result, = api_resp.Result
-        
-        for tag in result.Tags:
-            image.tags.add(
-                Tag.cast(tag.Tag).with_metadata(
-                    tag_confidence.set(tag.Probability),
-                    tag_origin.set(origin),
-                )
+        if not isinstance(config_class, type) or not issubclass(config_class, AutotaggerConfig):
+            raise TypeError(
+                f"{cls.__name__}.CONFIG_CLASS must be a subclass of AutotaggerConfig, got {config_class!r}"
             )
+    
+    @abstractmethod
+    def get_tags(self, image: TaggedImage, config: ConfigT) -> Tags:
+        """
+        Predicts the tags that would be assigned to the image, without modifying it.
+        
+        The returned tags should carry `tag_origin`, `tag_confidence` and, where
+        applicable, `tag_category` metadata, so that they match exactly what
+        `autotag_image` would add to the image.
+        """
+        ...
+    
+    def autotag_image(self, image: TaggedImage, config: ConfigT) -> TaggedImage:
+        """
+        Predicts tags for the image and adds them to it.
+        
+        :returns: The same image, returned for convenient chaining.
+        """
+        
+        image.tags.add(self.get_tags(image, config))
         
         return image
     
-    def autotag_dataset[T: typing.Sequence[TaggedImage]](self, model: Model, dataset: T, *, origin: str = "ai", progressbar: typing.Callable[[T], typing.Iterable[TaggedImage]] = lambda x: x) -> T:
+    def autotag_dataset[T: typing.Sequence[TaggedImage]](
+        self,
+        dataset: T,
+        config: ConfigT,
+        *,
+        progressbar: typing.Callable[[T], typing.Iterable[TaggedImage]] = lambda x: x,
+    ) -> T:
+        """
+        Autotags every image in the dataset.
+        
+        :returns: The same dataset, returned for convenient chaining.
+        """
+        
         for image in progressbar(dataset):
-            self.autotag_image(model, image, origin=origin)
+            self.autotag_image(image, config)
         
         return dataset
 
 
-@define(repr=False)
-class Model:
-    _name: str
-    _parameters: dict[str, typing.Any]
-    _default_schema: list[bdtm_ai_api.ModelAdditionalParameters]
-    
-    @classmethod
-    def from_schema(cls, name: str, schema: list[bdtm_ai_api.ModelAdditionalParameters]) -> typing.Self:
-        parameters = {parameter.Key: cls._param_decode(parameter.Value, parameter.Type) for parameter in schema}
-        return cls(name, parameters, schema)
-    
-    @property
-    def name(self) -> str:
-        return self._name
-    
-    @property
-    def parameters(self) -> typing.Mapping[str, typing.Any]:
-        return frozendict(self._parameters)
-    
-    @property
-    def schema(self) -> list[bdtm_ai_api.ModelAdditionalParameters]:
-        return [
-            bdtm_ai_api.ModelAdditionalParameters(
-                Key=parameter.Key,
-                Value=self._param_encode(self._parameters[parameter.Key], parameter.Type),
-                Type=parameter.Type,
-                Comment=parameter.Comment,
-            )
-            for parameter in self._default_schema
-        ]
-    
-    @property
-    def descriptor(self) -> bdtm_ai_api.ModelParameters:
-        return bdtm_ai_api.ModelParameters(
-            ModelName=self.name,
-            AdditionalParameters=self.schema
-        )
-    
-    def set(self, **kwargs: typing.Any) -> typing.Self:
-        """
-        If a value is None, resets the parameter to its default value.
-        """
-        
-        for key in kwargs.keys():
-            if key not in self.parameters:
-                raise ValueError(f"Unknown parameter {key!r} for {self!r}")
-        
-        new_params: dict[str, typing.Any] = {}
-        
-        for key, value in kwargs.items():
-            param_spec, = (parameter for parameter in self._default_schema if parameter.Key == key)
-            
-            if value is None:
-                value = self._param_decode(param_spec.Value, param_spec.Type)
-            
-            try:
-                self._param_encode(value, param_spec.Type)
-            except AssertionError:
-                raise ValueError(f"{value!r} is not a valid value for parameter {key!r} of type {param_spec.Type!r} of {self!r}")
-            
-            new_params[key] = value
-        
-        self._parameters.update(new_params)
-        
-        return self
-
-    def __repr__(self) -> str:
-        return f"<Model {self._name!r} ({", ".join(f"{key}={value!r}" for key, value in self._parameters.items())})>"
-    
-    @staticmethod
-    def _param_encode(value: typing.Any, type: str) -> str:
-        match type:
-            case "float1":
-                assert isinstance(value, (int, float))
-                return str(value)
-            case "int":
-                assert isinstance(value, int)
-                return str(value)
-            case "string":
-                assert isinstance(value, str)
-                return value
-            case "list":
-                assert all(isinstance(item, str) for item in value)
-                return ",".join(value)
-            case "bool":
-                assert isinstance(value, bool)
-                return str(value).lower()
-
-        raise RuntimeError(f"Unknown parameter type {type!r}")
-    
-    @staticmethod
-    def _param_decode(value: str, type: str) -> typing.Any:
-        assert isinstance(value, str)
-        match type:
-            case "float1":
-                return float(value)
-            case "int":
-                return int(value)
-            case "string":
-                return value
-            case "list":
-                return list(value.split(","))  # TODO: Keep as string?
-            case "bool" if value == "true":
-                return True
-            case "bool" if value == "false":
-                return False
-            case "bool":
-                raise ValueError(f"Invalid boolean value {value!r}")
-
-        raise RuntimeError(f"Unknown parameter type {type!r}")
-
-
 __all__ = [
+    "AutotaggerConfig",
     "Autotagger",
-    "Model",
 ]

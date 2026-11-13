@@ -17,7 +17,14 @@ from sd_toolkit.misc import ipython_show_multiline_strings
 from sd_toolkit.widgets import TaggerWidget, TagGroup
 from sd_toolkit.gallery_dl import BaseGalleryDLPost, BaraagPost, DanbooruPost, GelbooruPost, KemonoPost, MastodonPost, PawchivePost, PixivPost, UnknownPost
 from sd_toolkit.config import Config
-from sd_toolkit.autotag import Autotagger, Model
+from sd_toolkit.autotag import (
+    Autotagger,
+    AutotaggerConfig,
+    BDTMAutotagger,
+    BDTMAutotaggerConfig,
+    WDv3Autotagger,
+    WDv3AutotaggerConfig,
+)
 # Not re-exported here: sd_toolkit.diff, sd_toolkit.storage
 
 __all__ = [
@@ -54,5 +61,9 @@ __all__ = [
     "UnknownPost",
     "Config",
     "Autotagger",
-    "Model",
+    "AutotaggerConfig",
+    "BDTMAutotagger",
+    "BDTMAutotaggerConfig",
+    "WDv3Autotagger",
+    "WDv3AutotaggerConfig",
 ]
