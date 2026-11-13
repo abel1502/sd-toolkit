@@ -258,6 +258,24 @@ class Tags:
         
         return result
     
+    def inspect_sources(self) -> str:
+        """
+        Builds a human-readable summary of the tags grouped by their origin,
+        with the confidence attached to each tag.
+        """
+        
+        by_origin: dict[str | None, list[Tag]] = {}
+        for tag in self:
+            by_origin.setdefault(tag_origin.of(tag, None), []).append(tag)
+        
+        return "\n".join(
+            f"{origin or 'unknown'}:\n" + "\n".join(
+                f"    {tag.to_hierarchical_str()}@{round(tag_confidence.of(tag), 2)}"
+                for tag in tags
+            )
+            for origin, tags in sorted(by_origin.items(), key=lambda item: item[0] or "")
+        )
+    
     def __str__(self) -> str:
         return self.to_hierarchical_str()
     
