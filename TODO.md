@@ -3,13 +3,9 @@
 
 - [ ] Training supervision module (auto-add `.civitai.info` and `.json`, callback for making previews, copy to _my)
 - [ ] Incorporate `_process_civitai.py`, `_add_metadata.py`, , etc.?
-- [ ] Integrate AI-tagging
 - [ ] Cannibalize traintrain a bit
-- [ ] Something like ~/.config/sd_toolkit.profile.py to hold my own preferred configuration?
 - [ ] ...
 
-
-Immediate priority TODO:
 - [ ] Training process integration
   - Store and write out configs at least.
   - Possibly also invoke training script, watch directory for new epochs and add
@@ -20,3 +16,7 @@ Immediate priority TODO:
       plus allow creating new ones -- for now simply by making a copy and opening it in krita for editing)
 - [ ] Fix preview generation on anima in easy training scripts.
 
+- [ ] Debug the issue with tagger widget keybinds
+- [ ] WDv3Autotagger might give tags with `&#039;`?
+- [ ] Add character-to-series inference, either to the autotagger or as a Tags method
+- [ ] Add danbooru tag database knowledge
