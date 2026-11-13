@@ -5,9 +5,6 @@ import re
 import itertools
 import mimetypes
 import functools
-import platform
-import os
-import subprocess
 
 import anywidget
 import ipywidgets
@@ -317,7 +314,10 @@ class TaggerWidget(BaseWidget):
             out=out,
         )
         
-        self.load_image(starting_idx)
+        if starting_idx in range(len(dataset)):
+            self.load_image(starting_idx)
+        else:
+            self.image_idx = starting_idx
     
     @staticmethod
     def _convert_groups(
@@ -452,17 +452,7 @@ class TaggerWidget(BaseWidget):
         if image is None:
             return
         
-        match platform.system():
-            case "Windows":
-                os.startfile(image.path)
-            case "Darwin":
-                subprocess.check_call(["open", str(image.path)])
-            case "Linux":
-                env = dict(os.environ)
-                env.pop("GTK_PATH", None)  # https://github.com/ros2/ros2/issues/1406#issuecomment-1500898231
-                subprocess.check_call(["xdg-open", str(image.path)], env=env)
-            case other:
-                logger.error(f"Unknown platform {other!r}. Cannot open image.")
+        image.open_viewer()
     
     def _refresh_tags(self) -> None:
         image = self.current_image

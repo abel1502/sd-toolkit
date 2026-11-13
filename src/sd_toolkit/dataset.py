@@ -8,6 +8,9 @@ import math
 import itertools
 import contextlib
 import functools
+import os
+import platform
+import subprocess
 
 from loguru import logger
 import attrs
@@ -20,6 +23,7 @@ from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import save, load
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import DatasetDiff
+    from sd_toolkit.widgets import TaggerWidget
 from sd_toolkit.metadata import Metadata, MetadataUpdate, MetadataField
 from sd_toolkit.gallery_dl import BaseGalleryDLPost
 
@@ -39,6 +43,19 @@ class TaggedImage:
     
     def preview(self) -> ipywidgets.Image:
         return ipywidgets.Image(value=self.path.read_bytes())
+    
+    def open_viewer(self) -> None:
+        match platform.system():
+            case "Windows":
+                os.startfile(self.path)
+            case "Darwin":
+                subprocess.check_call(["open", str(self.path)])
+            case "Linux":
+                env = dict(os.environ)
+                env.pop("GTK_PATH", None)  # https://github.com/ros2/ros2/issues/1406#issuecomment-1500898231
+                subprocess.check_call(["xdg-open", str(self.path)], env=env)
+            case other:
+                logger.error(f"Unknown platform {other!r}. Cannot open image.")
 
 
 img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
@@ -228,6 +245,11 @@ class Dataset(typing.Sequence[TaggedImage]):
             roots=roots,
             contents=contents,
         )
+    
+    def preview(self) -> TaggerWidget:
+        from sd_toolkit.widgets import TaggerWidget
+        
+        return TaggerWidget(self, [])
     
     def write_raw(
         self,
