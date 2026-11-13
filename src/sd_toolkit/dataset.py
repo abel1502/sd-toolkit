@@ -47,13 +47,37 @@ img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
 )
 
 
-@define(repr=False)
+@define(repr=False, init=False)
 class Dataset(typing.Sequence[TaggedImage]):
     roots: list[pathlib.Path]
     # Note: cannot realistically be a nanotable.Table, because the tags need to be mutable without an explicit `rekey`.
     contents: list[TaggedImage]
     
     _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
+    
+    def __init__(
+        self,
+        roots: list[pathlib.Path] | object = ...,
+        contents: list[TaggedImage] | object = ...,
+    ):
+        """
+        Creates a dataset.
+        
+        Either both `roots` and `contents` must be specified, or neither (in which
+        case an empty dataset is created). Passing only one of them is a mistake,
+        most likely from passing a list of images as `roots`.
+        """
+        
+        if roots is ... and contents is ...:
+            roots = []
+            contents = []
+        elif roots is ... or contents is ...:
+            raise TypeError("Dataset requires either both `roots` and `contents`, or neither")
+        
+        self.__attrs_init__(
+            roots=roots,
+            contents=contents,
+        )
     
     @classmethod
     def discover_files(
