@@ -159,8 +159,8 @@ class DatasetDiff:
         new = new.clone()
         
         if flatten_tags:
-            old.apply_tags(lambda tags: tags.flatten())
-            new.apply_tags(lambda tags: tags.flatten())
+            old.apply_to_tags(lambda tags: tags.flatten())
+            new.apply_to_tags(lambda tags: tags.flatten())
         
         image_pairs: dict[pathlib.Path, tuple[TaggedImage | None, TaggedImage | None]] = {}
         for image in old:
