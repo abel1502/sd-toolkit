@@ -16,7 +16,7 @@
       plus allow creating new ones -- for now simply by making a copy and opening it in krita for editing)
 - [ ] Fix preview generation on anima in easy training scripts.
 
-- [ ] Debug the issue with tagger widget keybinds
+- [ ] Debug the issue with tagger widget keybinds. Sometimes several images are affected! (Verified during galahad dataset preprocessing)
 - [ ] WDv3Autotagger might give tags with `&#039;`?
 - [ ] Add character-to-series inference, either to the autotagger or as a Tags method
 - [ ] Add danbooru tag database knowledge
