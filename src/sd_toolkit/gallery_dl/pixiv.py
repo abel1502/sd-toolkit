@@ -84,7 +84,7 @@ class Series(BaseModel):
     title: str
     caption: str | None = None
     cover_image_urls: ProfileImageUrls | None = None
-    create_date: datetime
+    create_date: datetime | None = None
     width: int | None = None
     height: int | None = None
     total: int | None = None
