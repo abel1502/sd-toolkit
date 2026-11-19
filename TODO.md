@@ -20,3 +20,6 @@
 - [ ] WDv3Autotagger might give tags with `&#039;`?
 - [ ] Add character-to-series inference, either to the autotagger or as a Tags method
 - [ ] Add danbooru tag database knowledge
+- [ ] Add pixiv tag translation (dependent on above, or maybe danbooru api?)
+- [ ] Add LLM-powered autotagging for OCR
+- [ ] Add video and ugoira (zip) frame extraction. Also crops, probably? Needs the same infrastructure (mutable appendix to an otherwise immutable dataset for derived images)
