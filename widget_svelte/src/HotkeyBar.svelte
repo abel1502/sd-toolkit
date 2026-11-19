@@ -1,8 +1,10 @@
 <script lang="ts">
   import { shortcut, type ShortcutEventDetail, type ShortcutModifierDefinition } from '@svelte-put/shortcut';
+  import { onDestroy } from "svelte";
 
   import type { TagGroupInfo, ToggleGroupEvent } from "./types";
   import { isGroupPresent } from "./utils";
+  import { enabledHotkeys } from "./hotkeys";
 
   interface Props {
     tagGroups: TagGroupInfo[];
@@ -16,7 +18,25 @@
 
   let { tagGroups, tagPresence, toggleGroup, nextImage, prevImage, revertImage, class: extraClass = "" }: Props = $props();
 
-  let hotkeysEnabled = $state(false);
+  // Identifies this widget in the global hotkeys state.
+  const hotkeyScope = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+  let hotkeysEnabled = $derived($enabledHotkeys === hotkeyScope);
+
+  function releaseHotkeys() {
+    enabledHotkeys.update(scope => scope === hotkeyScope ? null : scope);
+  }
+
+  function updateHotkeysEnabled(enabled: boolean) {
+    if (enabled) {
+      enabledHotkeys.set(hotkeyScope);
+    } else {
+      releaseHotkeys();
+    }
+  }
+
+  onDestroy(releaseHotkeys);
 
   function handleGroupToggle(event: ShortcutEventDetail) {
     // TODO: Find button and toggle click instead?
@@ -125,7 +145,12 @@
 
   <label class="ml-auto toggle">
     <span class="mr-3">Keyboard shortcuts</span>
-    <input type="checkbox" class="sr-only toggle-input" bind:checked={hotkeysEnabled} />
+    <input
+      type="checkbox"
+      class="sr-only toggle-input"
+      checked={hotkeysEnabled}
+      onchange={(event) => updateHotkeysEnabled(event.currentTarget.checked)}
+    />
     <div class="toggle-track"></div>
   </label>
 </div>
