@@ -152,6 +152,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         *,
         tag_separator: str = ",",
         recurse: bool = True,
+        expect_no_tags: bool = False,
     ) -> Dataset:
         if isinstance(root, str):
             root = pathlib.Path(root)
@@ -167,8 +168,8 @@ class Dataset(typing.Sequence[TaggedImage]):
             
             tags_file: pathlib.Path | None = next((x for x in tags_file_candidates if x is None or x.is_file()))
             
-            if tags_file is None:
-                logger.info(f"Image {img_file} has no tags")
+            if tags_file is None != expect_no_tags:
+                logger.info(f"Image {img_file} has {"no" if tags_file is None else "unexpected"} tags")
             
             tags: Tags = Tags.parse_plain(tags_file.read_text(), sep=tag_separator) if tags_file else Tags()
             
