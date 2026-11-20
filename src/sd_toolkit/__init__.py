@@ -9,7 +9,8 @@ else:
         handlers=[dict(sink=sys.stderr, level="INFO")],
     )
 
-from sd_toolkit.tags import TagLike, Tag, TagsLike, TagMatch, Tags, tag_category, tag_is_trigger, tag_origin, tag_confidence
+from sd_toolkit.tags import TagLike, Tag, TagCategory, TagsLike, TagMatch, Tags, tag_category, tag_is_trigger, tag_origin, tag_confidence
+from sd_toolkit.tag_lookup import TagLookup, TableTagLookup, CompositeTagLookup
 from sd_toolkit.dataset import Dataset, img_gallery_dl_post, TaggedImage
 from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming, FlatNaming, SequentialNaming
@@ -30,6 +31,7 @@ from sd_toolkit.autotag import (
 __all__ = [
     "TagLike",
     "Tag",
+    "TagCategory",
     "TagsLike",
     "TagMatch",
     "Tags",
@@ -37,6 +39,9 @@ __all__ = [
     "tag_is_trigger",
     "tag_origin",
     "tag_confidence",
+    "TagLookup",
+    "TableTagLookup",
+    "CompositeTagLookup",
     "Dataset",
     "TaggedImage",
     "img_gallery_dl_post",

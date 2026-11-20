@@ -6,6 +6,9 @@ import inspect
 
 from loguru import logger
 
+if typing.TYPE_CHECKING:
+    from sd_toolkit.tag_lookup import TagLookup
+
 
 class Config:
     """
@@ -80,7 +83,9 @@ class Config:
     def make_style_sample_prompt(self, trigger: str, *, extra_pos: str = "", extra_neg: str = "") -> str:
         return f"masterpiece, best quality, {trigger}, {extra_pos} --n {extra_neg} --w 1024 --h 1024 --d 123 --l 4.0 --s 32"
     
-    # TODO: Danbooru tags table(s)
+    @property
+    def pixiv_tag_lookup(self) -> TagLookup:
+        self._fail()
 
 
 __all__ = [

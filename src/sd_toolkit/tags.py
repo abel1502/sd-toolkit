@@ -16,6 +16,7 @@ from sd_toolkit.storage import CBOR_CONVERTER
 from sd_toolkit.hierarchical_tags_format import HierarchicalTagsDict, parse_hierarchical_dict, format_hierarchical_dict, TagFormatHook
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import TagsDiff
+    from sd_toolkit.tag_lookup import TagLookup
 
 
 type TagLike = Tag | str | tuple[str, ...]
@@ -99,9 +100,11 @@ class Tag:
         return attrs.evolve(self, metadata=self.metadata.update(*updates))
 
 
-tag_category = MetadataField[typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"]](
+type TagCategory = typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"]
+
+tag_category = MetadataField[TagCategory](
     "tag_category",
-    typing.Literal["artist", "character", "copyright", "general", "meta", "unknown"],
+    TagCategory,
     default="unknown",
 )
 
@@ -677,7 +680,18 @@ class Tags:
         "]": "\\]",
     })
 
-    # TODO: Instead handle the logic in the conversion from a danbooru scrape?
+    @staticmethod
+    def _make_origin_matcher(
+        match_origin: str | re.Pattern | typing.Callable[[Tag], bool],
+    ) -> typing.Callable[[Tag], bool]:
+        if isinstance(match_origin, str):
+            match_origin = re.compile(match_origin)
+        
+        if isinstance(match_origin, re.Pattern):
+            return lambda tag: bool(match_origin.fullmatch(tag_origin.of(tag)))
+        
+        return match_origin
+    
     def convert_booru_to_ai(
         self,
         *,
@@ -690,12 +704,8 @@ class Tags:
         if match_origin is not False:
             if match_origin is True:
                 match_origin = r".*booru"
-            if isinstance(match_origin, str):
-                match_origin = re.compile(match_origin)
-            if isinstance(match_origin, re.Pattern):
-                match_origin = lambda x: match_origin.fullmatch(x)
             
-            with self.view(match_origin) as view:
+            with self.view(self._make_origin_matcher(match_origin)) as view:
                 view.convert_booru_to_ai(
                     match_origin=False,
                     remove_bad_tags=remove_bad_tags,
@@ -720,9 +730,86 @@ class Tags:
         
         return self
     
-    # TODO: convert_pixiv_to_booru. Query (and persistently cache!) the danbooru wiki, or optionally ask the user. Or use the scraped aliases dataset.
+    def convert_pixiv_to_booru(
+        self,
+        lookup: TagLookup | None = None,
+        *,
+        match_origin: str | re.Pattern | typing.Callable[[Tag], bool] | bool = False,
+        missing: typing.Literal["keep", "drop"] = "keep",
+        set_category: bool = True,
+        new_origin: str | None = "pixiv_translate",
+    ) -> typing.Self:
+        """
+        Translates pixiv tags to their danbooru equivalents.
+        
+        The actual resolution is delegated to a `TagLookup`. By default, the
+        lookup is taken from the user configuration (`Config.pixiv_tag_lookup`).
+        
+        :param lookup: The tag lookup to use. Defaults to `Config.get().pixiv_tag_lookup`.
+        :param match_origin: If not `False`, only convert tags whose origin matches
+            this pattern/predicate. `True` is shorthand for `r"pixiv"`.
+        :param missing: What to do with tags that the lookup doesn't know about:
+            `"keep"` leaves them untranslated, `"drop"` removes them.
+        :param set_category: Whether to populate `tag_category` metadata from the
+            lookup result, if the lookup provides it and the tag doesn't have a
+            category yet.
+        :param new_origin: The origin to assign to converted tags. Pass `None` to
+            clear the origin (which then reads as `"unknown"`).
+        """
+        
+        if lookup is None:
+            from sd_toolkit.config import Config
+            lookup = Config.get().pixiv_tag_lookup
+        
+        if match_origin is not False:
+            if match_origin is True:
+                match_origin = r"pixiv"
+            
+            with self.view(self._make_origin_matcher(match_origin)) as view:
+                view.convert_pixiv_to_booru(
+                    lookup,
+                    match_origin=False,
+                    missing=missing,
+                    set_category=set_category,
+                    new_origin=new_origin,
+                )
+            
+            return self
+        
+        def _convert(tag: Tag) -> TagsLike:
+            result = lookup(tag.tag)
+            
+            if result is None:
+                return tag if missing == "keep" else []
+            
+            result_tags = Tags.cast(result)
+            if not result_tags:
+                return tag if missing == "keep" else []
+            
+            converted_tags: list[Tag] = []
+            
+            for result_tag in result_tags:
+                metadata_updates: list[MetadataUpdate] = [
+                    tag_origin.unset() if new_origin is None else tag_origin.set(new_origin),
+                ]
+                
+                result_category = tag_category.of(result_tag)
+                if set_category and tag_category.of(tag) == "unknown" and result_category != "unknown":
+                    metadata_updates.append(tag_category.set(result_category))
+                
+                converted_tags.append(
+                    tag.moved(tag.parent_path + result_tag.path).with_metadata(*metadata_updates)
+                )
+            
+            return converted_tags
+        
+        self.flatmap(_convert)
+        
+        return self
     
     # TODO: convert_ai_to_booru: .map_str(lambda tag: tag.replace(" ", "_").replace("\\(", "(").replace("\\)", ")")) + some extra. Useful for importing from bdtm and uniformity
+    
+    # TODO: infer_categories
     
     def prefix_artist_tags(self) -> typing.Self:
         return self.map(lambda tag: tag.renamed(f"@{tag.tag}") if tag_category.of(tag) == "artist" else tag)
@@ -807,6 +894,7 @@ def _structure_Tags(data: list[typing.Any], cls: typing.Type[Tags]) -> Tags:
 __all__ = [
     "TagLike",
     "Tag",
+    "TagCategory",
     "tag_category",
     "tag_is_trigger",
     "tag_origin",
