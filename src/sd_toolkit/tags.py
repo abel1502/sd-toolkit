@@ -561,13 +561,12 @@ class Tags:
         return self.map(lambda tag: tag.renamed(func(tag.tag)))
     
     def flatmap(self, func: typing.Callable[[Tag], TagsLike]) -> typing.Self:
-        new: list[Tag] = []
+        new = Tags()
         
         for tag in self:
-            new.extend(Tags.cast(func(tag)))
+            new.add(func(tag))
         
-        self._tags.clear()
-        self._tags.extend(new)
+        self._tags = new._tags
         
         return self
     
@@ -808,7 +807,7 @@ class Tags:
         return self
     
     # TODO: convert_ai_to_booru: .map_str(lambda tag: tag.replace(" ", "_").replace("\\(", "(").replace("\\)", ")")) + some extra. Useful for importing from bdtm and uniformity
-    
+
     # TODO: infer_categories
     
     def prefix_artist_tags(self) -> typing.Self:
