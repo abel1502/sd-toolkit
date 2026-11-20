@@ -806,8 +806,41 @@ class Tags:
         
         return self
     
-    # TODO: convert_ai_to_booru: .map_str(lambda tag: tag.replace(" ", "_").replace("\\(", "(").replace("\\)", ")")) + some extra. Useful for importing from bdtm and uniformity
-
+    def convert_ai_to_booru(
+        self,
+        *,
+        match_origin: str | re.Pattern | typing.Callable[[Tag], bool] | bool = False,
+    ) -> typing.Self:
+        """
+        Converts AI-generated tags to booru style: replaces spaces with
+        underscores and unescapes parentheses and brackets.
+        
+        :param match_origin: If not `False`, only convert tags whose origin matches
+            this pattern/predicate. `True` is shorthand for `r"unknown"`.
+        """
+        
+        if match_origin is not False:
+            if match_origin is True:
+                match_origin = r"unknown"
+            
+            with self.view(self._make_origin_matcher(match_origin)) as view:
+                view.convert_ai_to_booru(match_origin=False)
+            
+            return self
+        
+        # TODO: Something else?
+        self.map_str(
+            lambda tag: tag
+                .replace(" ", "_")
+                .replace("\\(", "(")
+                .replace("\\)", ")")
+                .replace("\\[", "[")
+                .replace("\\]", "]"),
+            affect_path=True,
+        )
+        
+        return self
+    
     # TODO: infer_categories
     
     def prefix_artist_tags(self) -> typing.Self:
