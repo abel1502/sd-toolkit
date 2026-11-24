@@ -2,9 +2,6 @@
 - Remove the old files from `C:\AI\source_images\grabber`
 
 - Training supervision module (auto-add `.civitai.info` and `.json`, callback for making previews, copy to _my)
-- Incorporate `_process_civitai.py`, `_add_metadata.py`, , etc.?
-- Cannibalize traintrain a bit
-- ...
 
 - Training process integration
   - Store and write out configs at least.
@@ -12,9 +9,7 @@
     metadata automatically. Perhaps even auto-generate previews (or make an sd-webui script to do that easily)
   - Post-process: add metadata (json and civitai.info), maybe previews, filter tags in lora metadata
 - Add image view widget (maybe use it as default preview for images and datasets)
-- Add image selection widget (store yes/no choice for all images, configurable default, 
-      plus allow creating new ones -- for now simply by making a copy and opening it in krita for editing)
-- Fix preview generation on anima in easy training scripts.
+- Add image selection widget (store yes/no choice for all images, configurable default, plus allow creating new ones -- for now simply by making a copy and opening it in krita for editing)
 
 - WDv3Autotagger might give tags with `&#039;`?
 - Add character-to-series inference, either to the autotagger or as a Tags method?
@@ -23,7 +18,7 @@
 - Add infrastructure for creating new images (mutable appendix to an otherwise immutable dataset for derived images)
   - Add video and ugoira (zip) frame extraction
   - Add image cropping (creates new image, never modifies existing one! except maybe adjusting a crop before finalizing it)
-  - Add a widget for drawing masks
+  - Add a widget for drawing masks (to be used with ai studio)
 - Add a widget for editing tags fully
   - Might need a textual format for tags that includes metadata? Probably impossible though, since it's arbitrary python objects
   - So instead show all tags as ui elements.
@@ -38,4 +33,19 @@
   - Maybe also implement an extension to ai-toolkit?
     - Protected tags, instead of a single trigger
     - Tag dropout
+    - Models in non-diffusers format?
+  - Also expose configs publicly
+- In TaggerConfig, add `\` to the sample prompts automatically. Also some convenience wrapper for making a prompt from only the substantial part.
+- Add an API wrapper for sd-webui-forge-neo
+  - Here or in idofront. In fact, maybe merge idofront into here?
+- Embedding generation with a vision model, then guided clustering (i.e. boolean tag prediction)?
+  - Useful for selecting things to tag that are hard to define
+  - Would need a UI widget
+  - Use Nvidia Kumo for tag prediction?
+- CLI
+  - Some commands specific to me:
+    - `_process_civitai.py`, `_add_metadata.py`
+      - Maybe not incorporate the raw scripts at first, but simply expose an alias?
+    - "set up a directory for a lora" (templated `./scrape.ps1` + `.vscode` + `anima/[name].ipynb`)
+    - May need to be at least partially defined within user config
 
