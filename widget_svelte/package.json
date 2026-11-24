@@ -14,7 +14,6 @@
   "dependencies": {
     "@anywidget/types": "^0.4.0",
     "@lucide/svelte": "^1.25.0",
-    "@svelte-put/shortcut": "^4.2.0",
     "svelte": "^5.56.3",
     "svelte-confetti": "^2.3.2"
   },
@@ -26,6 +25,7 @@
     "@types/node": "^26.0.1",
     "magic-string": "^0.30.21",
     "postcss": "^8.5.15",
+    "svelte-check": "^4.7.8",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"

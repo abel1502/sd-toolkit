@@ -8,9 +8,6 @@ import math
 import itertools
 import contextlib
 import functools
-import os
-import platform
-import subprocess
 
 from loguru import logger
 import attrs
@@ -21,9 +18,11 @@ import rich.console
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import save, load
+from sd_toolkit.config import Config
+from sd_toolkit.misc import open_file
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import DatasetDiff
-    from sd_toolkit.widgets import TaggerWidget
+    from sd_toolkit.widgets import PreviewWidget
 from sd_toolkit.metadata import Metadata, MetadataUpdate, MetadataField
 from sd_toolkit.gallery_dl import BaseGalleryDLPost
 
@@ -45,17 +44,7 @@ class TaggedImage:
         return ipywidgets.Image(value=self.path.read_bytes())
     
     def open_viewer(self) -> None:
-        match platform.system():
-            case "Windows":
-                os.startfile(self.path)
-            case "Darwin":
-                subprocess.check_call(["open", str(self.path)])
-            case "Linux":
-                env = dict(os.environ)
-                env.pop("GTK_PATH", None)  # https://github.com/ros2/ros2/issues/1406#issuecomment-1500898231
-                subprocess.check_call(["xdg-open", str(self.path)], env=env)
-            case other:
-                logger.error(f"Unknown platform {other!r}. Cannot open image.")
+        open_file(self.path, command=Config.get().image_viewer_command)
 
 
 img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
@@ -247,10 +236,18 @@ class Dataset(typing.Sequence[TaggedImage]):
             contents=contents,
         )
     
-    def preview(self) -> TaggerWidget:
-        from sd_toolkit.widgets import TaggerWidget
+    def preview(
+        self,
+        *,
+        info: typing.Callable[[TaggedImage], typing.Mapping[str, typing.Any]] | None = None,
+    ) -> PreviewWidget:
+        """
+        :param info: Computes additional properties to display for each image.
+        """
         
-        return TaggerWidget(self, [])
+        from sd_toolkit.widgets import PreviewWidget
+        
+        return PreviewWidget(self, info=info)
     
     def write_raw(
         self,

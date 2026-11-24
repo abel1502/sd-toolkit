@@ -87,6 +87,24 @@ class Config:
     def pixiv_tag_lookup(self) -> TagLookup:
         self._fail()
 
+    @property
+    def image_viewer_command(self) -> list[str] | None:
+        """
+        The command used to open images for viewing (the path is appended as the last argument).
+        `None` means the OS default viewer.
+        """
+        
+        return None
+    
+    @property
+    def image_editor_command(self) -> list[str] | None:
+        """
+        The command used to open images for editing (the path is appended as the last argument),
+        e.g. `[r"C:\\Program Files\\Krita (x64)\\bin\\krita.exe"]`. `None` means the OS default editor.
+        """
+        
+        return None
+
 
 __all__ = [
     "Config",

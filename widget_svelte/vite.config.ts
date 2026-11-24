@@ -16,7 +16,7 @@ export default defineConfig({
     outDir: resolve(__dirname, "../src/sd_toolkit/widgets/static"),
     lib: {
       entry: {
-        tagger: resolve(__dirname, "./src/_tagger.ts"),
+        widgets: resolve(__dirname, "./src/main.ts"),
       },
       fileName: (_format, entryName) => `${entryName}.js`,
       cssFileName: "styles",

@@ -1,25 +1,19 @@
 import typing
 import pathlib
-import copy
 import re
 import itertools
-import mimetypes
 import functools
 
-import anywidget
 import ipywidgets
 import traitlets
-import attrs
 from attrs import define, field
-import cattrs
 from loguru import logger
-from data_url import construct_data_url
-import cachetools
 
 from sd_toolkit.tags import Tag, TagLike, Tags, TagsLike
 from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.storage import load, save
-from sd_toolkit.widgets.base import STATIC, Messages, command, BaseWidget
+from sd_toolkit.widgets.base import Messages, use_cattrs
+from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle
 
 
 @define
@@ -34,13 +28,6 @@ class TagGroupInfo:
     tags: list[TagInfo]
     level: int = 0
     hotkey: str | None = None
-
-
-def _use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
-    return dict(
-        to_json=lambda obj, manager: cattrs.unstructure(obj),
-        from_json=lambda obj, manager: cattrs.structure(obj, as_type),
-    )
 
 
 @define(init=False)
@@ -203,15 +190,7 @@ class ToggleGroupMessage:
     present: bool
 
 @define
-class SwitchImageMessage:
-    idx: int
-
-@define
 class RevertImageMessage:
-    pass
-
-@define
-class ViewImageMessage:
     pass
 
 
@@ -219,23 +198,17 @@ class ViewImageMessage:
 # - The interactive pass discards the metadata on every tag the user touches, because it takes the tag string from the front-end message.
 # - The non-interactive pass applies the metadata as it is in the tag group definitions.
 # This is good for some metadata, like tag confidence, but bad for stuff like tag danbooru category.
-class TaggerWidget(BaseWidget):
-    _esm = STATIC / "tagger.js"
-    _css = STATIC / "styles.css"
+class TaggerWidget(ImageViewerWidget):
+    _component: str = traitlets.Unicode("tagger").tag(sync=True)
     
     # Traitlets (Py -> JS)
-    image: str = traitlets.Unicode("").tag(sync=True)
-    image_saved: bool = traitlets.Bool(False).tag(sync=True)
     tag_groups: list[TagGroupInfo] = traitlets.List(default_value=[]).tag(
         sync=True,
-        **_use_cattrs(list[TagGroupInfo]),
+        **use_cattrs(list[TagGroupInfo]),
     )
     tag_presence: dict[str, bool] = traitlets.Dict(default_value={}).tag(sync=True)
-    image_idx: int = traitlets.Int(0).tag(sync=True)
-    image_count: int = traitlets.Int(0).tag(sync=True)
     
     # TODO: Make these public and the traitlets private? Seems like this is the stuff a user might, if rarely, want to access, while the traitlets are meant for JS-side consumption only.
-    _dataset: typing.Sequence[TaggedImage]
     _originals: dict[pathlib.Path, Tags]
     _choices: SavedChoices
     _saved_choices_path: pathlib.Path | None
@@ -249,6 +222,7 @@ class TaggerWidget(BaseWidget):
         skip_reviewed: bool = True,
         auto_hotkeys: typing.Literal["top_level", "all", "none"] = "none",
         auto_promote: bool = False,
+        info: InfoFunc | None = None,
         out: ipywidgets.Output | None = None,
     ):
         """
@@ -259,17 +233,19 @@ class TaggerWidget(BaseWidget):
             Note that this is different to a dataset checkpoint, as it only affects the specified tags.
             This means that you can change something else in the dataset and stil re-run the widget without
             repeating any of your manual inputs.
-        :param redo: By default, the widget will not show any images that already have annotations in `saved_choices`.
-            If this is `True`, then it will show all images regardless.
+        :param skip_reviewed: By default, the widget will start at the first image that doesn't have annotations
+            in `saved_choices`. If this is `False`, it will start at the very first image regardless.
         :param auto_hotkeys: Allow to assign digit (1-9) hotkeys to groups automatically. `"top_level"` will 
             only assign hotkeys to top-level groups, `"all"` will assign hotkeys to all groups, and `"none"`
             will not assign any hotkeys. Numbers are assigned in order. Groups beyond the first 9 and groups
             with explicit hotkeys are ignored.
         :param auto_promote: If `True`, automatically converts flat tags to their scoped variants present
             in the `groups`. See `Tags.promote_hierarchy` for more details.
-        :param out_capture: A decorator applied to the event handler for the widget. The indended use is to
-            pass `out.capture()` (yes, called once with no arguments), where `out` is an `ipywidgets.Output`.
+        :param info: Computes additional properties to display for each image.
+        :param out: If specified, the output of event handlers will be captured into it.
         """
+        
+        groups = list(groups)
         
         combined_tags = Tags()
         for _, group in itertools.chain.from_iterable(
@@ -287,19 +263,17 @@ class TaggerWidget(BaseWidget):
                 saved_choices = pathlib.Path(saved_choices)
             
             self._choices = SavedChoices.load_or_create(saved_choices, combined_tags)
-            self._saved_choices_path = pathlib.Path(saved_choices)
+            self._saved_choices_path = saved_choices
         else:
             self._choices = SavedChoices(combined_tags)
             self._saved_choices_path = None
         
         # TODO: Soft-skip:
-        # - Show tickmarks on images that have already been reviewed (including during the current session).
         # - Make next and prev skip reviewed images by default, but visit them if shift is held.
         #   - This would make prev go back to the very beginning every time, though.
         # - Clicking on the seekbar should skip forward unless shift is held, in which case it shouldn't skip.
         # - The event for switching image should have a skip direction parameter.
         
-        self._dataset = dataset
         self._originals = {image.path: image.tags.clone() for image in dataset}
         
         starting_idx: int = 0
@@ -309,39 +283,48 @@ class TaggerWidget(BaseWidget):
                 starting_idx += 1
         
         super().__init__(
-            tag_groups=self._convert_groups(groups, auto_hotkeys),
-            image_count=len(dataset),
+            dataset,
+            info=info,
+            start_idx=starting_idx,
             out=out,
+            tag_groups=self._convert_groups(groups, auto_hotkeys),
+            has_done_screen=True,
+            mark_styles=[None, MarkStyle("Reviewed", "#16a34a")],
         )
-        
-        if starting_idx in range(len(dataset)):
-            self.load_image(starting_idx)
-        else:
-            self.image_idx = starting_idx
     
     @staticmethod
     def _convert_groups(
         groups: typing.Iterable[TagGroup],
         auto_hotkeys: typing.Literal["top_level", "all", "none"],
     ) -> list[TagGroupInfo]:
+        groups = list(groups)
+        
+        # Digits already used as explicit hotkeys are skipped
+        explicit_hotkeys: set[str] = {
+            group_def._hotkey
+            for _, group_def in itertools.chain.from_iterable(group.flatten() for group in groups)
+            if group_def._hotkey is not None
+        }
+        
         infer_hotkey: typing.Callable[[int], str | None]
         hotkey_counter = 0
+        
+        def next_hotkey() -> str | None:
+            nonlocal hotkey_counter
+            while hotkey_counter < 9:
+                hotkey_counter += 1
+                if str(hotkey_counter) not in explicit_hotkeys:
+                    return str(hotkey_counter)
+            return None
+        
         if auto_hotkeys == "top_level":
             def infer_hotkey(level: int) -> str | None:
-                nonlocal hotkey_counter
                 if level > 0:
                     return None
-                if hotkey_counter < 9:
-                    hotkey_counter += 1
-                    return str(hotkey_counter)
-                return None
+                return next_hotkey()
         elif auto_hotkeys == "all":
             def infer_hotkey(level: int) -> str | None:
-                nonlocal hotkey_counter
-                if hotkey_counter < 9:
-                    hotkey_counter += 1
-                    return str(hotkey_counter)
-                return None
+                return next_hotkey()
         elif auto_hotkeys == "none":
             def infer_hotkey(level: int) -> str | None:
                 return None
@@ -371,9 +354,7 @@ class TaggerWidget(BaseWidget):
     messages.register_messages(dict(
         toggle_tag=ToggleTagMessage,
         toggle_group=ToggleGroupMessage,
-        switch_image=SwitchImageMessage,
         revert_image=RevertImageMessage,
-        view_image=ViewImageMessage,
     ))
     
     @messages.register_handler
@@ -411,25 +392,6 @@ class TaggerWidget(BaseWidget):
         self._record_choices(image)
     
     @messages.register_handler
-    def _do_switch_image(self, msg: SwitchImageMessage) -> None:
-        logger.debug(f"Switch image {msg}")
-        
-        with self.hold_sync():
-            prev_image = self.current_image
-            
-            if msg.idx in range(self.image_count):
-                self.load_image(msg.idx)
-            else:
-                # Note: image_idx == self.image_count is a legitimate case for this branch. Should result in the done screen.
-                self.image = ""
-                self.image_idx = msg.idx
-                self.image_saved = False
-        
-        # TODO: Should apply when advancing to next image after looking, but not when skimming through quickly...
-        if prev_image is not None:
-            self._record_choices(prev_image)
-    
-    @messages.register_handler
     def _do_revert_image(self, msg: RevertImageMessage) -> None:
         logger.debug(f"Revert image {msg}")
         
@@ -441,18 +403,22 @@ class TaggerWidget(BaseWidget):
         assert original_tags is not None
         
         self._choices.reset(image, original_tags)
-        self._refresh_tags()
-        self.image_saved = False
+        with self.hold_sync():
+            self._refresh_tags()
+            self._update_mark(image)
     
-    @messages.register_handler
-    def _do_view_image(self, event: ViewImageMessage) -> None:
-        logger.debug(f"View image {event}")
+    @typing.override
+    def _on_show(self, image: TaggedImage | None) -> None:
+        self._refresh_tags()
         
-        image = self.current_image
-        if image is None:
-            return
+    @typing.override
+    def _on_leave(self, image: TaggedImage) -> None:
+        # TODO: Should apply when advancing to next image after looking, but not when skimming through quickly...
+        self._record_choices(image)
         
-        image.open_viewer()
+    @typing.override
+    def _mark(self, image: TaggedImage) -> int:
+        return int(self._choices.has(image))
     
     def _refresh_tags(self) -> None:
         image = self.current_image
@@ -467,50 +433,11 @@ class TaggerWidget(BaseWidget):
         
         self.tag_presence = tag_presence
     
-    def _record_choices(self, image: TaggedImage) -> bool:
+    def _record_choices(self, image: TaggedImage) -> None:
         tags_changed = self._choices.record(image)
         if tags_changed and self._saved_choices_path is not None:
             self._choices.save(self._saved_choices_path)
-        if tags_changed and image == self.current_image:
-            self.image_saved = True
-    
-    @property
-    def current_image(self) -> TaggedImage | None:
-        if self.image_idx in range(self.image_count):
-            return self._dataset[self.image_idx]
-        return None
-    
-    def load_image(self, idx: int) -> None:
-        image = self._dataset[idx]
-        
-        mime_type = mimetypes.guess_file_type(image.path)[0]
-        
-        image_url: str
-        if mime_type is None or not mime_type.startswith("image/"):
-            logger.warning(f"Cannot load {image.path}: {mime_type!r} is not a know image mime type. Supplying a blank image.")
-            image_url = ""
-        else:
-            # TODO: Maybe also preload images in the background.
-            image_bytes = self._read_image(image.path)
-            
-            image_url = construct_data_url(
-                mime_type=mime_type,
-                base64_encoded=False,
-                data=image_bytes,
-            )
-        
-        with self.hold_sync():
-            self.image_idx = idx
-            self.image = image_url
-            self.image_saved = self._choices.has(image)
-            self._refresh_tags()
-    
-    @cachetools.cached(
-        cache=cachetools.LRUCache(maxsize=5),
-        key=lambda _, path: path,
-    )
-    def _read_image(self, path: pathlib.Path) -> bytes:
-        return path.read_bytes()
+        self._update_mark(image)
 
 
 __all__ = [

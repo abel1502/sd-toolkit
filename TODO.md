@@ -9,24 +9,12 @@
     metadata automatically. Perhaps even auto-generate previews (or make an sd-webui script to do that easily)
   - Post-process: add metadata (json and civitai.info), maybe previews, filter tags in lora metadata
 
-- WDv3Autotagger might give tags with `&#039;`?
 - Add character-to-series inference, either to the autotagger or as a Tags method?
 - Add danbooru tag database knowledge (currently only pixiv aliases, perhaps also category inference and more)
 - Add LLM-powered autotagging for OCR
-- Add infrastructure for creating new images (mutable appendix to an otherwise immutable dataset for derived images)
+- Derived images (`DerivedImages`):
   - Add video and ugoira (zip) frame extraction
-  - Add image cropping (creates new image, never modifies existing one! except maybe adjusting a crop before finalizing it)
-  - Add a widget for drawing masks (to be used with ai studio)
-  - Add a widget for creating edited versions of images (or add a button for that to other widgets). Create a new file, open it in krita.
-- Add a widget for editing tags fully
-  - Might need a textual format for tags that includes metadata? Probably impossible though, since it's arbitrary python objects
-  - So instead show all tags as ui elements.
-  - Removal is easy. Adding a new one might require adding the tag definition python-side.
-  - Can have a shortcut (not as in keybind) for the simple case (programmable default added metadata)
-  - Also programmable buttons for quick actions
-  - Less reproducible than the first taggerwidget (toggleable tags/groups) -- that one can save the changes and reapply them fully; this one might need to save initial and final state and reapply only if the initial state matches...
-- Add a passive dataset preview widget (currently implemented as a tagger widget with no tag groups). Show all tags and optionally additional properties, as computed by a user-provided lambda.
-- Add an image selection widget (store yes/no choice for all images, configurable default; currently implemented as a tagger widget with a dedicated tag)
+  - Add a UI for image cropping (`DerivedImages.crop` exists, but needs the box specified manually)
 - AI-toolkit config generation?
   - Generalize under one abstraction, perhaps?
   - Support multiple datasets in both cases

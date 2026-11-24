@@ -1,181 +1,100 @@
 <script lang="ts">
-  import { Confetti } from "svelte-confetti";
-  import { slide } from "svelte/transition";
   import IconSave from "@lucide/svelte/icons/save";
   import IconSaveOff from "@lucide/svelte/icons/save-off";
   import IconRotateCCW from "@lucide/svelte/icons/rotate-ccw";
-  import IconZoomIn from "@lucide/svelte/icons/zoom-in";
-  import { untrack } from "svelte";
-  import type { AnyModel, Experimental } from "./anywidget.svelte";
-  import { bindTrait } from "./anywidget.svelte";
-  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, SwitchImageEvent } from "./types";
+  import { onDestroy, untrack } from "svelte";
+  import type { WidgetProps } from "./anywidget.svelte";
+  import { useTrait, sendMessage } from "./anywidget.svelte";
+  import { ImageLoader } from "./imageLoader";
+  import { hotkeyCode, type Shortcut, type Modifier } from "./hotkeys";
+  import type { TagGroupInfo, ToggleTagEvent, ToggleGroupEvent, ViewerTraits } from "./types";
+  import { isGroupPresent } from "./utils";
   import TagsPanel from "./TagsPanel.svelte";
-  import NavBar from "./NavBar.svelte";
-  import HotkeyBar from "./HotkeyBar.svelte";
-  import ImagePreview from "./ImagePreview.svelte";
+  import Viewer from "./Viewer.svelte";
 
-  // TODO:
-  // - Show when an image was already handled (a checkmark?)
-  // - Clicking on the progressbar to seek? Coloring progressbar based on which images are already handled?
-  interface Props {
-    model: AnyModel<{
-      image: string;
-      tag_groups: TagGroupInfo[];
-      tag_presence: Record<string, boolean>;
-      image_idx: number;
-      image_count: number;
-      image_saved: boolean;
-    }>;
-    experimental: Experimental;
+  type Traits = ViewerTraits & {
+    tag_groups: TagGroupInfo[];
+    tag_presence: Record<string, boolean>;
   };
 
   // These mustn't ever change, so we get rid of reactivity here.
-  let _props: Props = $props();
+  let _props: WidgetProps<Traits> = $props();
   let { model, experimental } = untrack(() => _props);
 
-  let image = $state(model.get("image"));
-  bindTrait({
-    model,
-    trait: "image",
-    get: () => image,
-    set: (value) => (image = value),
-  });
+  const loader = new ImageLoader(experimental);
+  onDestroy(() => loader.dispose());
 
-  let tagGroups = $state(model.get("tag_groups"));
-  bindTrait({
-    model,
-    trait: "tag_groups",
-    get: () => tagGroups,
-    set: (value) => (tagGroups = value),
-  })
-
-  let tagPresence = $state(model.get("tag_presence"));
-  bindTrait({
-    model,
-    trait: "tag_presence",
-    get: () => tagPresence,
-    set: (value) => (tagPresence = value),
-  })
-
-  let curImageIdx = $state(model.get("image_idx"));
-  bindTrait({
-    model,
-    trait: "image_idx",
-    get: () => curImageIdx,
-    set: (value) => (curImageIdx = value),
-  });
-
-  let totalImages = $state(model.get("image_count"));
-  bindTrait({
-    model,
-    trait: "image_count",
-    get: () => totalImages,
-    set: value => totalImages = value,
-  })
-
-  let imageSaved = $state(model.get("image_saved"));
-  bindTrait({
-    model,
-    trait: "image_saved",
-    get: () => imageSaved,
-    set: (value) => (imageSaved = value),
-  })
-
-  let is_done = $derived(curImageIdx == totalImages);
+  const tagGroups = useTrait(model, "tag_groups");
+  const tagPresence = useTrait(model, "tag_presence");
 
   function toggleTag(event: ToggleTagEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
-    model.send({
-      kind: "custom",
-      type: "toggle_tag",
-      ...event,
-    });
+    sendMessage(model, "toggle_tag", { ...event });
   }
 
   function toggleGroup(event: ToggleGroupEvent) {
     // TODO: Add a spinner while waiting for updates from python somehow?
-    model.send({
-      kind: "custom",
-      type: "toggle_group",
-      ...event,
-    });
-  }
-
-  function goToImage(event: SwitchImageEvent) {
-    event.idx = Math.max(0, Math.min(event.idx, totalImages));
-
-    // TODO: Toggle a spinner until image changes?
-    model.send({
-      kind: "custom",
-      type: "switch_image",
-      ...event,
-    });
-  }
-
-  function nextImage() {
-    goToImage({ idx: curImageIdx + 1 });
-  }
-
-  function prevImage() {
-    goToImage({ idx: curImageIdx - 1 });
+    sendMessage(model, "toggle_group", { ...event });
   }
 
   function revertImage() {
-    model.send({
-      kind: "custom",
-      type: "revert_image",
-    });
+    sendMessage(model, "revert_image");
   }
 
-  function viewImage() {
-    model.send({
-      kind: "custom",
-      type: "view_image",
-    })
+  function handleGroupHotkey(idx: number, modifier: Modifier | null) {
+    const group = tagGroups.value[idx];
+
+    let present: boolean;
+    if (modifier == "shift") {
+      present = true;
+    } else if (modifier == "ctrl") {
+      present = false;
+    } else {
+      present = !isGroupPresent(group, tagPresence.value);
+    }
+
+    toggleGroup({ idx, present });
   }
 
-  let width: number | undefined = $state();
+  let shortcuts: Shortcut[] = $derived([
+    ...tagGroups.value.flatMap((group, idx) => group.hotkey ? (
+      ([null, "shift", "ctrl"] as (Modifier | null)[]).map(modifier => ({
+        code: hotkeyCode(group.hotkey!),
+        modifiers: modifier ? [modifier] : [],
+        callback: () => handleGroupHotkey(idx, modifier),
+      }))
+    ) : []),
+    { code: "Backspace", callback: revertImage },
+  ]);
 
   // TODO: Wire up
   let autoSaveUnchanged: boolean = $state(true);
 </script>
 
-
-<div class="flex flex-col w-full resize-x min-w-2xl max-w-full p-4 border rounded-lg bg-white shadow-sm overflow-hidden" bind:clientWidth={width}>
-  {#if is_done}
-    <div class="grid place-items-center h-16 border border-green-300 p-4 rounded-lg bg-green-200 shadow-sm">
-      {#if totalImages > 0}
-        <Confetti x={[-width / 400.0, width / 400.0]} y={[-0.5, 0.25]} amount={100} />
-      {/if}
-      <span class="text-green-800 font-bold absolute">Done!</span>
-    </div>
-  {:else}
-    <div class="flex flex-row gap-6 resize-y min-h-48 h-64 overflow-hidden" transition:slide>
-      <ImagePreview class="h-full max-h-[35vw]" {image} {imageSaved} buttons={[
-        {
-          icon: autoSaveUnchanged ? IconSave : IconSaveOff,
-          title: (autoSaveUnchanged ? "Disable" : "Enable") + " saving unchanged images",
-          onclick: () => { autoSaveUnchanged = !autoSaveUnchanged },
-        },
-        {
-          icon: IconRotateCCW,
-          title: "Reset image tags",
-          onclick: revertImage,
-        },
-        {
-          icon: IconZoomIn,
-          title: "Open in external viewer",
-          onclick: viewImage,
-        },
-      ]} />
-
-      <div class="flex-1 py-1 overflow-y-auto scrollbar-hidden">
-          <TagsPanel {tagGroups} {tagPresence} {toggleGroup} {toggleTag} />
-      </div>
-    </div>
-  {/if}
-
-  <NavBar class="mt-6" {curImageIdx} {totalImages} {goToImage} {nextImage} {prevImage} />
-
-  <HotkeyBar class="mt-4" {tagGroups} {tagPresence} {toggleGroup} {nextImage} {prevImage} {revertImage} />
-</div>
+<Viewer
+  {model}
+  {loader}
+  {shortcuts}
+  help={[
+    { keys: [["group hotkey"]], text: "toggle group" },
+    { keys: [["Shift", "..."]], text: "enable group" },
+    { keys: [["Ctrl", "..."]], text: "disable group" },
+    { keys: [["Backspace"]], text: "reset current image" },
+  ]}
+  imageButtons={[
+    {
+      icon: autoSaveUnchanged ? IconSave : IconSaveOff,
+      title: (autoSaveUnchanged ? "Disable" : "Enable") + " saving unchanged images",
+      onclick: () => { autoSaveUnchanged = !autoSaveUnchanged },
+    },
+    {
+      icon: IconRotateCCW,
+      title: "Reset image tags",
+      onclick: revertImage,
+    },
+  ]}
+>
+  {#snippet side()}
+    <TagsPanel tagGroups={tagGroups.value} tagPresence={tagPresence.value} {toggleGroup} {toggleTag} />
+  {/snippet}
+</Viewer>

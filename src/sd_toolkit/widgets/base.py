@@ -114,6 +114,10 @@ class Messages:
         if not isinstance(data, dict):
             raise ValueError(f"Expected a JSON dictionary, got {type(data)!r}.")
         
+        # Might be handled by another registry (e.g. a base class's one)
+        if data.get("type") not in self._registry:
+            return False
+        
         msg = self.deserialize(data)
         msg_type: str = msg._MESSAGE_TYPE_
         
@@ -129,62 +133,84 @@ class Messages:
         return True
 
 
-# TODO: Not bytes?
-type Buffers = typing.Sequence[bytes]
+# Note: anywidget actually passes `memoryview`s in
+type Buffers = typing.Sequence[bytes | memoryview]
 
 
-class WrappedCommandPlain[InT, OutT](typing.Protocol):
-    def __call__(self, msg: InT) -> OutT:
+class WrappedCommandPlain[SelfT, InT, OutT](typing.Protocol):
+    def __call__(self_, self: SelfT, msg: InT, /) -> OutT:
         ...
 
 
-class WrappedCommandBuffers[InT, OutT](typing.Protocol):
-    def __call__(self, msg: InT, buffers: Buffers) -> tuple[OutT, Buffers]:
+class WrappedCommandBuffers[SelfT, InT, OutT](typing.Protocol):
+    def __call__(self_, self: SelfT, msg: InT, buffers: Buffers, /) -> tuple[OutT, Buffers]:
         ...
 
 
-class AnywidgetCommand(typing.Protocol):
-    def __call__(self, data: JSON, buffers: Buffers) -> tuple[JSON, Buffers]:
+class AnywidgetCommand[SelfT](typing.Protocol):
+    def __call__(self_, self: SelfT, data: JSON, buffers: Buffers, /) -> tuple[JSON, Buffers]:
         ...
 
 
-def command[InT, OutT](func: WrappedCommandPlain[InT, OutT] | WrappedCommandBuffers[InT, OutT]) -> AnywidgetCommand:
+def command[SelfT, InT, OutT](
+    func: WrappedCommandPlain[SelfT, InT, OutT] | WrappedCommandBuffers[SelfT, InT, OutT],
+) -> AnywidgetCommand[SelfT]:
     """
-    Creates an experimental anywidgets command that can be invoked from the frontend.
+    Creates an experimental anywidget command (a method) that can be invoked from the frontend
+    with `experimental.invoke(name, msg, { buffers })`, where `name` is the method's name.
     Handles the JSON encoding and decoding of the input and output data.
     
-    The wrapped function must either be `(msg) -> response`, or `(msg, buffers) -> (response, buffers)`.
+    The wrapped method must either be `(self, msg) -> response`, or `(self, msg, buffers) -> (response, buffers)`.
     Note that you cannot mix-and-match (only take buffers in or only return them).
+    
+    If the method raises an exception, the frontend receives `{"__error__": "<description>"}` as
+    the response, so that it doesn't wait for a response forever.
     """
     
     args = inspect.getfullargspec(func)
     
-    handler: AnywidgetCommand
+    if len(args.args) not in (2, 3):
+        raise TypeError(f"A command must take either 2 or 3 arguments (self, msg, and optionally buffers).")
     
-    if len(args) == 2:
-        in_type = args.annotations[args[1]]
+    in_type = args.annotations.get(args.args[1], typing.Any)
+    with_buffers = len(args.args) == 3
         
-        def handler(data: JSON, buffers: Buffers) -> tuple[JSON, Buffers]:
-            msg = JSON_CONVERTER.structure(data, in_type)
-            response = func(msg)
-            return JSON_CONVERTER.unstructure(response), []
+    @functools.wraps(func)
+    def handler(self: SelfT, data: JSON, buffers: Buffers) -> tuple[JSON, Buffers]:
+        try:
+            msg = data if in_type is typing.Any else JSON_CONVERTER.structure(data, in_type)
 
-    elif len(args) == 3:
-        in_type = args.annotations[args[1]]
+            response_buffers: Buffers = []
+            if with_buffers:
+                response, response_buffers = func(self, msg, buffers)
+            else:
+                response = func(self, msg)
         
-        def handler(data: JSON, buffers: Buffers) -> tuple[JSON, Buffers]:
-            msg = JSON_CONVERTER.structure(data, in_type)
-            response, response_buffers = func(msg, buffers)
-            return JSON_CONVERTER.unstructure(response), response_buffers
-        
-    else:
-        raise TypeError(f"A command must take either 2 or 3 arguments (self, data, and optionally buffers).")
+            return JSON_CONVERTER.unstructure(response), list(response_buffers)
+        except Exception as e:
+            logger.exception(f"Widget command {func.__name__!r} failed")
+            return {"__error__": f"{type(e).__name__}: {e}"}, []
     
     return anywidget.experimental.command(handler)
 
 
+def use_cattrs[T](as_type: type[T]) -> typing.Mapping[str, typing.Any]:
+    """
+    Traitlet metadata (to be passed to `.tag(...)`) that makes the trait sync via cattrs.
+    """
+    
+    return dict(
+        to_json=lambda obj, manager: JSON_CONVERTER.unstructure(obj, as_type),
+        from_json=lambda obj, manager: JSON_CONVERTER.structure(obj, as_type),
+    )
+
+
 class BaseWidget(anywidget.AnyWidget):
-    _css: typing.ClassVar[str] = STATIC / "styles.css"
+    # All the widgets share a single frontend bundle, which picks the component to render based on `_component`.
+    # (Separate bundles would've needed to share chunks, which isn't possible, since anywidget inlines the module.)
+    _esm: typing.ClassVar[pathlib.Path] = STATIC / "widgets.js"
+    _css: typing.ClassVar[pathlib.Path] = STATIC / "styles.css"
+    _component: str = traitlets.Unicode("").tag(sync=True)
     
     messages: typing.ClassVar[Messages] = Messages()
     
@@ -204,7 +230,7 @@ class BaseWidget(anywidget.AnyWidget):
         self.on_msg(msg_handler)
     
     def _msg_handler(self: BaseWidget, data: JSON, buffers: Buffers) -> None:
-        if not isinstance(data, dict) or data["kind"] != "custom":
+        if not isinstance(data, dict) or data.get("kind") != "custom":
             return
         
         for cls in type(self).__mro__:
@@ -221,6 +247,7 @@ class BaseWidget(anywidget.AnyWidget):
 __all__ = [
     "STATIC",
     "Messages",
-    "commmand",
+    "command",
+    "use_cattrs",
     "BaseWidget",
 ]

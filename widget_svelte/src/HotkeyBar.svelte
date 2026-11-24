@@ -1,22 +1,15 @@
 <script lang="ts">
-  import { shortcut, type ShortcutEventDetail, type ShortcutModifierDefinition } from '@svelte-put/shortcut';
   import { onDestroy } from "svelte";
 
-  import type { TagGroupInfo, ToggleGroupEvent } from "./types";
-  import { isGroupPresent } from "./utils";
-  import { enabledHotkeys } from "./hotkeys";
+  import { enabledHotkeys, dispatchShortcut, type Shortcut, type ShortcutHelp } from "./hotkeys";
 
   interface Props {
-    tagGroups: TagGroupInfo[];
-    tagPresence: Record<string, boolean>;
-    toggleGroup: (event: ToggleGroupEvent) => void;
-    nextImage: () => void;
-    prevImage: () => void;
-    revertImage: () => void;
+    shortcuts: Shortcut[];
+    help: ShortcutHelp[];
     class?: string;
   };
 
-  let { tagGroups, tagPresence, toggleGroup, nextImage, prevImage, revertImage, class: extraClass = "" }: Props = $props();
+  let { shortcuts, help, class: extraClass = "" }: Props = $props();
 
   // Identifies this widget in the global hotkeys state.
   const hotkeyScope = globalThis.crypto?.randomUUID?.()
@@ -38,94 +31,17 @@
 
   onDestroy(releaseHotkeys);
 
-  function handleGroupToggle(event: ShortcutEventDetail) {
-    // TODO: Find button and toggle click instead?
-    let hotkey = event.trigger.code!.at(-1)!.toLowerCase();
-
-    let idx = tagGroups.findIndex(g => g.hotkey?.toLowerCase() === hotkey);
-
-    if (idx >= 0) {
-      let group = tagGroups[idx];
-
-      let present: boolean;
-      if (event.originalEvent.shiftKey) {
-        present = true;
-      } else if (event.originalEvent.ctrlKey) {
-        present = false;
-      } else {
-        present = !isGroupPresent(group, tagPresence);
-      }
-
-      console.log(`Toggling group ${idx} to ${present}`);
-      toggleGroup({ idx, present });
-      event.originalEvent.preventDefault();
+  function onkeydown(event: KeyboardEvent) {
+    if (!hotkeysEnabled) {
+      return;
     }
-  }
 
-  function handleNextImage(event: ShortcutEventDetail) {
-    nextImage();
-    event.originalEvent.preventDefault();
-  }
-
-  function handlePrevImage(event: ShortcutEventDetail) {
-    prevImage();
-    event.originalEvent.preventDefault();
-  }
-
-  function handleUndo(event: ShortcutEventDetail) {
-    revertImage();
-    event.originalEvent.preventDefault();
+    dispatchShortcut(shortcuts, event);
   }
 </script>
 
-<svelte:window
-  use:shortcut={{
-    trigger: [
-      ...Array.from({ length: 10 }, (_, i) => ({
-        code: `Digit${i}`,  // Digit0 ... Digit9
-        modifier: ['none', 'shift', 'ctrl'] as ShortcutModifierDefinition,
-        callback: handleGroupToggle,
-        enabled: hotkeysEnabled,
-      })),
-      ...Array.from({ length: 26 }, (_, i) => ({
-        code: `Key${String.fromCharCode(65 + i)}`,  // KeyA ... KeyZ
-        modifier: ['none', 'shift', 'ctrl'] as ShortcutModifierDefinition,
-        callback: handleGroupToggle,
-        enabled: hotkeysEnabled,
-      })),
-      {
-        code: 'Space',
-        modifier: 'none',
-        callback: handleNextImage,
-        enabled: hotkeysEnabled,
-      },
-      {
-        code: 'ArrowRight',
-        modifier: 'none',
-        callback: handleNextImage,
-        enabled: hotkeysEnabled,
-      },
-      {
-        code: 'Space',
-        modifier: 'shift',
-        callback: handlePrevImage,
-        enabled: hotkeysEnabled,
-      },
-      {
-        code: 'ArrowLeft',
-        modifier: 'none',
-        callback: handlePrevImage,
-        enabled: hotkeysEnabled,
-      },
-      {
-        code: 'Backspace',
-        modifier: 'none',
-        callback: handleUndo,
-        enabled: hotkeysEnabled,
-      },
-    ]
-  }}
-/>
+<!-- Capture phase, so that the shortcuts take precedence over the notebook's own (e.g. JupyterLab's command mode ones). -->
+<svelte:window onkeydowncapture={onkeydown} />
 
 <div class={[
   "w-full flex flex-row gap-2 justify-center text-sm text-slate-600",
@@ -134,12 +50,17 @@
   <div class="min-w-48 flex-1 py-1 overflow-x-auto scrollbar-hidden">
     <div class="flex w-max gap-2 whitespace-nowrap">
       <span>Keyboard shortcuts:</span>
-      <span>group hotkey &ndash; toggle group;</span>
-      <span><kbd>Shift</kbd>+... &ndash; enable group;</span>
-      <span><kbd>Ctrl</kbd>+... &ndash; disable group;</span>
-      <span><kbd>Space</kbd> &ndash; next image;</span>
-      <span><kbd>Shift</kbd>+<kbd>Space</kbd> &ndash; previous image;</span>
-      <span><kbd>Backspace</kbd> &ndash; reset current image.</span>
+      {#each help as { keys, text }, i}
+        <span>
+          {#each keys as combo, j}
+            {#if j > 0}/{/if}
+            {#each combo as key, k}
+              {#if k > 0}+{/if}<kbd>{key}</kbd>
+            {/each}
+          {/each}
+          &ndash; {text}{i == help.length - 1 ? "." : ";"}
+        </span>
+      {/each}
     </div>
   </div>
 
