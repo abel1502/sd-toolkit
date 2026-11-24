@@ -37,4 +37,5 @@
       - Maybe not incorporate the raw scripts at first, but simply expose an alias?
     - "set up a directory for a lora" (templated `./scrape.ps1` + `.vscode` + `anima/[name].ipynb`)
     - May need to be at least partially defined within user config
+- Maybe rename `TaggerWidget` and `SavedChoices`? Would need to alias for compat though, so maybe not
 
