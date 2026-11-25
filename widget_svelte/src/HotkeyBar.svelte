@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
 
   import { enabledHotkeys, dispatchShortcut, type Shortcut, type ShortcutHelp } from "./hotkeys";
+  import Toggle from "./Toggle.svelte";
 
   interface Props {
     shortcuts: Shortcut[];
@@ -29,6 +30,8 @@
     }
   }
 
+  // A newly rendered widget takes the shortcuts over, since it's most likely the one the user wants to use
+  onMount(() => enabledHotkeys.set(hotkeyScope));
   onDestroy(releaseHotkeys);
 
   function onkeydown(event: KeyboardEvent) {
@@ -64,16 +67,9 @@
     </div>
   </div>
 
-  <label class="ml-auto toggle">
-    <span class="mr-3">Keyboard shortcuts</span>
-    <input
-      type="checkbox"
-      class="sr-only toggle-input"
-      checked={hotkeysEnabled}
-      onchange={(event) => updateHotkeysEnabled(event.currentTarget.checked)}
-    />
-    <div class="toggle-track"></div>
-  </label>
+  <Toggle class="ml-auto" checked={hotkeysEnabled} onchange={updateHotkeysEnabled}>
+    Keyboard shortcuts
+  </Toggle>
 </div>
 
 <style lang="postcss">
@@ -81,26 +77,5 @@
 
   kbd {
     @apply align-baseline p-1 text-xs font-semibold text-slate-600 border-gray-400 bg-gray-200 border rounded-lg;
-  }
-
-  .toggle {
-    @apply inline-flex items-center not-disabled:cursor-pointer select-none;
-  }
-
-  .toggle-track {
-    @apply relative h-6 min-w-11 w-11 rounded-full bg-slate-300 transition-colors duration-200;
-  }
-
-  .toggle-track::after {
-    content: '';
-    @apply absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200;
-  }
-
-  .toggle-input:checked + .toggle-track {
-    @apply bg-emerald-500;
-  }
-
-  .toggle-input:checked + .toggle-track::after {
-    transform: translateX(1.25rem);
   }
 </style>

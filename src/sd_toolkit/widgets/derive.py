@@ -61,6 +61,7 @@ class DeriveWidget(ImageViewerWidget):
         dataset: typing.Sequence[TaggedImage],
         derived: DerivedImages,
         *,
+        show_derived: bool = False,
         include_auxiliary: bool = False,
         info: InfoFunc | None = None,
         start_idx: int = 0,
@@ -69,6 +70,7 @@ class DeriveWidget(ImageViewerWidget):
         """
         :param dataset: The images to derive new images from.
         :param derived: Where to store the new images.
+        :param show_derived: Whether to show the images derived from each image right after it.
         :param include_auxiliary: Whether to also list auxiliary derived images (e.g. masks).
         :param info: Computes additional properties to display for each image.
         :param start_idx: The image to start at.
@@ -81,6 +83,7 @@ class DeriveWidget(ImageViewerWidget):
             dataset,
             info=info,
             derived=derived,
+            show_derived=show_derived,
             start_idx=start_idx,
             out=out,
             mark_styles=[None, MarkStyle("Has derived images", "#9333ea")],

@@ -14,7 +14,11 @@
 - Add LLM-powered autotagging for OCR
 - Derived images (`DerivedImages`):
   - Add video and ugoira (zip) frame extraction
-  - Add a UI for image cropping (`DerivedImages.crop` exists, but needs the box specified manually)
+  - Settle the semantics (immutability/locking, tag inheritance, interaction with `Dataset.filter`, garbage collection, mask export layout for AI-toolkit)
+- Automatic tag refinement: pick the subset of a source's tags that applies to a particular image (e.g. a crop of a tagged image, or one image of a multi-image pixiv post, where the post's tags apply to all of them), possibly adding common extras like `cropped, out_of_frame`
+- `TagEditorWidget` UX:
+  - Undo and redo
+  - Customizable sorting/structuring of the displayed tags
 - AI-toolkit config generation?
   - Generalize under one abstraction, perhaps?
   - Support multiple datasets in both cases

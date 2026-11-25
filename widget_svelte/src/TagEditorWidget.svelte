@@ -9,6 +9,7 @@
   import TagList from "./TagList.svelte";
   import TagInput from "./TagInput.svelte";
   import Viewer from "./Viewer.svelte";
+  import Button from "./Button.svelte";
 
   type Traits = ViewerTraits & {
     tags: TagDisplay[];
@@ -78,7 +79,7 @@
   ]}
 >
   {#snippet side()}
-    <TagInput vocabulary={vocabulary.value} exclude={presentTags} onsubmit={addTags} bind:input />
+    <TagInput vocabulary={vocabulary.value} present={presentTags} onsubmit={addTags} bind:input />
 
     {#if error.value}
       <div class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 whitespace-pre-wrap">{error.value}</div>
@@ -87,15 +88,12 @@
     {#if actions.value.length > 0}
       <div class="flex flex-row flex-wrap gap-2">
         {#each actions.value as action, idx}
-          <button
-            class="flex items-center gap-2 px-3 py-1 text-sm rounded-lg ring-1 ring-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100"
-            onclick={() => runAction(idx)}
-          >
+          <Button onclick={() => runAction(idx)}>
             {#if action.hotkey}
               <span class="font-semibold text-slate-500">{action.hotkey}</span>
             {/if}
             {action.label}
-          </button>
+          </Button>
         {/each}
       </div>
     {/if}

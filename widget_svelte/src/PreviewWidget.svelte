@@ -6,6 +6,7 @@
   import type { TagDisplay, ViewerTraits } from "./types";
   import TagList from "./TagList.svelte";
   import Viewer from "./Viewer.svelte";
+  import Toggle from "./Toggle.svelte";
 
   type Traits = ViewerTraits & {
     tags: TagDisplay[];
@@ -29,10 +30,7 @@
   {#snippet side()}
     <div class="flex flex-row items-center justify-between">
       <span class="text-sm font-semibold text-slate-600">Tags ({tags.value.length})</span>
-      <label class="text-xs text-slate-500 flex items-center gap-1 cursor-pointer select-none">
-        <input type="checkbox" bind:checked={showText} />
-        as text
-      </label>
+      <Toggle size="sm" class="text-xs text-slate-500" bind:checked={showText}>as text</Toggle>
     </div>
     {#if showText}
       <textarea

@@ -189,7 +189,8 @@
         content={imageContent && (imageUrl || loading) ? imageContentSnippet : undefined}
       />
 
-      <div class="flex-1 min-w-0 py-1 overflow-y-auto scrollbar-hidden flex flex-col gap-3">
+      <!-- Padded, so that the outlines (rings) of the elements at the edges aren't clipped -->
+      <div class="flex-1 min-w-0 p-1 overflow-y-auto scrollbar-hidden flex flex-col gap-3">
         {#if showInfo}
           <InfoPanel items={imageInfo.value} />
         {/if}

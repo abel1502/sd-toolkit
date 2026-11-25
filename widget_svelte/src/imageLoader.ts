@@ -58,7 +58,8 @@ export class ImageLoader {
     const entry: Entry = {
       promise: invoke<{ key: string, mime: string }>(this.#experimental, "get_image", request)
         .then(([{ key, mime }, [buffer]]) => {
-          const url = URL.createObjectURL(new Blob([buffer], { type: mime }));
+          // Buffers received from the kernel are never shared
+          const url = URL.createObjectURL(new Blob([buffer as DataView<ArrayBuffer>], { type: mime }));
           entry.url = url;
           return { key, url };
         }),

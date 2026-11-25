@@ -16,7 +16,14 @@ from sd_toolkit.widgets.base import Messages, Buffers, command, use_cattrs, Base
 from sd_toolkit.derived import DerivedImages
 
 
-type InfoFunc = typing.Callable[[TaggedImage], typing.Mapping[str, typing.Any]]
+type InfoFunc = (
+    typing.Callable[[TaggedImage], typing.Mapping[str, typing.Any]]
+    | typing.Mapping[str, typing.Callable[[TaggedImage], typing.Any]]
+)
+"""
+Either a function returning a mapping of names to values, or a mapping of names to functions
+computing the values. The latter isolates errors to individual fields.
+"""
 
 
 @define
@@ -169,9 +176,12 @@ class ImageViewerWidget(BaseWidget):
     has_done_screen: bool = traitlets.Bool(False).tag(sync=True)
     can_edit_copy: bool = traitlets.Bool(False).tag(sync=True)
     
+    _source: typing.Sequence[TaggedImage]
     _dataset: typing.Sequence[TaggedImage]
+    _known_paths: set[pathlib.Path]
     _info: InfoFunc | None
     _derived: DerivedImages | None
+    _show_derived: bool
     
     def __init__(
         self,
@@ -179,26 +189,41 @@ class ImageViewerWidget(BaseWidget):
         *,
         info: InfoFunc | None = None,
         derived: DerivedImages | None = None,
+        show_derived: bool = True,
         start_idx: int = 0,
+        skip_reviewed: bool = False,
         out: ipywidgets.Output | None = None,
         **kwargs,
     ):
         """
         :param dataset: The images to show.
-        :param info: Computes additional properties to display for each image.
+        :param info: Computes additional properties to display for each image. See `InfoFunc`.
         :param derived: If specified, enables creating edited copies of images
             (which are stored in `derived`).
+        :param show_derived: If `True` (and `derived` is specified), the (non-auxiliary) images derived
+            from each image are shown right after it. See `DerivedImages.attach`.
         :param start_idx: The image to start at.
+        :param skip_reviewed: If `True`, starts at the first image at or after `start_idx` that
+            isn't reviewed yet (as defined by the subclass, see `_is_reviewed`).
         :param out: If specified, the output of event handlers will be captured into it.
             Useful for debugging.
         """
         
-        self._dataset = dataset
+        self._source = dataset
         self._info = info
         self._derived = derived
+        self._show_derived = show_derived
+        self._known_paths = set()
+        self._dataset = self._build_dataset()
+        
+        if skip_reviewed:
+            start_idx = next(
+                (i for i in range(start_idx, len(self._dataset)) if not self._is_reviewed(self._dataset[i])),
+                len(self._dataset),
+            )
         
         super().__init__(
-            image_count=len(dataset),
+            image_count=len(self._dataset),
             can_edit_copy=derived is not None,
             out=out,
             **kwargs,
@@ -211,6 +236,10 @@ class ImageViewerWidget(BaseWidget):
     
     @property
     def dataset(self) -> typing.Sequence[TaggedImage]:
+        """
+        The images shown by the widget (including the derived ones, if `show_derived` is on).
+        """
+        
         return self._dataset
     
     @property
@@ -243,13 +272,35 @@ class ImageViewerWidget(BaseWidget):
         max_idx = len(self._dataset) if self.has_done_screen else len(self._dataset) - 1
         return max(0, min(idx, max_idx))
     
+    def _build_dataset(self) -> typing.Sequence[TaggedImage]:
+        dataset = self._source
+        if self._derived is not None and self._show_derived:
+            # Note: no tag inheritance, as it would discard the tag changes made to the derived images
+            dataset = self._derived.attach(dataset, inherit_tags=False)
+        
+        new_images = [image for image in dataset if image.path not in self._known_paths]
+        self._known_paths.update(image.path for image in new_images)
+        if new_images:
+            self._prepare_images(new_images)
+        
+        return dataset
+    
     def refresh(self) -> None:
         """
-        Re-syncs everything with the frontend. Call it if you've changed the images externally.
+        Re-syncs everything with the frontend. Call it if you've changed the images externally
+        (including adding or removing derived images).
         """
+        
+        current = self.current_image
+        self._dataset = self._build_dataset()
+        
+        idx = self.image_idx
+        if current is not None:
+            idx = next((i for i, image in enumerate(self._dataset) if image is current), idx)
         
         with self.hold_sync():
             self.image_count = len(self._dataset)
+            self.image_idx = self._clamp_idx(idx)
             self.refresh_marks()
             self._refresh_current()
     
@@ -294,16 +345,46 @@ class ImageViewerWidget(BaseWidget):
         if self._derived is not None and (parent := self._derived.parent_path_of(image)) is not None:
             result.append(InfoItem("Derived from", f"{parent} ({self._derived.kind_of(image)})"))
         
-        if self._info is not None:
+        if isinstance(self._info, typing.Mapping):
+            for key, func in self._info.items():
+                result.append(self._info_item(image, key, lambda: func(image)))
+        elif self._info is not None:
             try:
-                result.extend(InfoItem(str(key), str(value)) for key, value in self._info(image).items())
+                values = self._info(image)
             except Exception as e:
                 logger.exception(f"The info function failed on {image.path}")
                 result.append(InfoItem("Info error", f"{type(e).__name__}: {e}"))
+            else:
+                for key, value in values.items():
+                    result.append(self._info_item(image, key, lambda: value))
         
         return result
     
+    @staticmethod
+    def _info_item(image: TaggedImage, key: typing.Any, get_value: typing.Callable[[], typing.Any]) -> InfoItem:
+        try:
+            # Note: converting to a string may fail too
+            value = str(get_value())
+        except Exception as e:
+            logger.opt(exception=e).debug(f"Computing the info field {key!r} failed on {image.path}")
+            value = f"Error: {type(e).__name__}: {e}"
+        
+        return InfoItem(str(key), value)
+    
     # Hooks
+    
+    def _prepare_images(self, images: list[TaggedImage]) -> None:
+        """
+        Called once for every image that enters the widget (initially, and on `refresh` for newly
+        derived images), before it's shown or marked. E.g. for applying saved changes.
+        """
+    
+    def _is_reviewed(self, image: TaggedImage) -> bool:
+        """
+        Used by `skip_reviewed`.
+        """
+        
+        return False
     
     def _on_show(self, image: TaggedImage | None) -> None:
         """

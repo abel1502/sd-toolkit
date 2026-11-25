@@ -9,8 +9,10 @@
   import { ImageLoader } from "./imageLoader";
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
+  import { TwoStepConfirm, throttled } from "./confirm.svelte";
   import Viewer from "./Viewer.svelte";
   import Thumbnail from "./Thumbnail.svelte";
+  import Button from "./Button.svelte";
 
   interface DerivedImageInfo {
     path: string;
@@ -40,21 +42,12 @@
     sendMessage(model, "open_derived", { path: child.path });
   }
 
-  // Deletion requires a second click to confirm
-  let confirmingDelete: string | null = $state(null);
-  let confirmTimeout: ReturnType<typeof setTimeout> | undefined;
+  const confirmDelete = new TwoStepConfirm<string>();
 
   function deleteDerived(child: DerivedImageInfo) {
-    clearTimeout(confirmTimeout);
-
-    if (confirmingDelete != child.path) {
-      confirmingDelete = child.path;
-      confirmTimeout = setTimeout(() => { confirmingDelete = null; }, 3000);
-      return;
+    if (confirmDelete.request(child.path)) {
+      sendMessage(model, "delete_derived", { path: child.path });
     }
-
-    confirmingDelete = null;
-    sendMessage(model, "delete_derived", { path: child.path });
   }
 
   function refresh() {
@@ -62,12 +55,7 @@
   }
 
   // The derived images were probably edited in another app, so refresh when the user comes back
-  let lastRefresh = 0;
-  function onfocus() {
-    if (Date.now() - lastRefresh < 1000) return;
-    lastRefresh = Date.now();
-    refresh();
-  }
+  const onfocus = throttled(refresh);
 
   const shortcuts: Shortcut[] = [
     { code: "KeyE", callback: editCopy },
@@ -88,22 +76,15 @@
 >
   {#snippet side()}
     <div class="flex flex-row flex-wrap items-center gap-2">
-      <button
-        class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ring-1 ring-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
-        onclick={editCopy}
-      >
-        <IconImagePlus class="w-4 h-4" />
-        Create an edited copy
-      </button>
-      <button
-        class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ring-1 ring-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100"
+      <Button variant="primary" icon={IconImagePlus} onclick={editCopy}>Create an edited copy</Button>
+      <Button
+        icon={IconRefresh}
         onclick={refresh}
         title="Reload the previews (happens automatically when the window regains focus)"
       >
-        <IconRefresh class="w-4 h-4" />
         Refresh
-      </button>
-    </div>
+      </Button>
+</div>
 
     <span class="text-sm font-semibold text-slate-600">Derived images ({children.value.length})</span>
 
@@ -119,25 +100,18 @@
             <b>{child.kind}</b> {child.name}
           </span>
           <div class="flex flex-row gap-1">
-            <button
-              class="flex-1 flex items-center justify-center gap-1 py-1 text-xs rounded-md ring-1 ring-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100"
-              onclick={() => openDerived(child)}
-            >
-              <IconPencilLine class="w-3.5 h-3.5" /> Edit
-            </button>
-            <button
-              class={[
-                "flex-1 flex items-center justify-center gap-1 py-1 text-xs rounded-md ring-1",
-                confirmingDelete == child.path
-                  ? "ring-red-400 bg-red-600 text-white"
-                  : "ring-gray-300 bg-gray-50 text-gray-700 hover:bg-red-50 hover:text-red-700",
-              ]}
+            <Button size="sm" class="flex-1" icon={IconPencilLine} onclick={() => openDerived(child)}>Edit</Button>
+            <Button
+              size="sm"
+              class="flex-1"
+              variant={confirmDelete.pending == child.path ? "confirm-danger" : "danger"}
+              icon={IconTrash}
               onclick={() => deleteDerived(child)}
             >
-              <IconTrash class="w-3.5 h-3.5" /> {confirmingDelete == child.path ? "Sure?" : "Delete"}
-            </button>
+              {confirmDelete.pending == child.path ? "Sure?" : "Delete"}
+            </Button>
           </div>
-        </div>
+</div>
       {:else}
         <span class="text-sm text-gray-400">None yet</span>
       {/each}

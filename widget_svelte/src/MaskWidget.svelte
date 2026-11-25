@@ -6,14 +6,17 @@
   import IconContrast from "@lucide/svelte/icons/contrast";
   import IconSave from "@lucide/svelte/icons/save";
   import IconCircleSlash from "@lucide/svelte/icons/circle-slash";
-  import { onDestroy, untrack } from "svelte";
+  import IconExternalLink from "@lucide/svelte/icons/external-link";
+import { onDestroy, untrack } from "svelte";
   import type { WidgetProps } from "./anywidget.svelte";
   import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
   import { ImageLoader } from "./imageLoader";
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
+  import { throttled } from "./confirm.svelte";
   import Viewer from "./Viewer.svelte";
-  import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
+  import Button from "./Button.svelte";
+import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
 
   type Traits = ViewerTraits & {
     mask_path: string;
@@ -109,6 +112,16 @@
     sendMessage(model, "delete_mask");
   }
 
+  async function editExternally() {
+    if (dirty) {
+      await save();
+    }
+    sendMessage(model, "edit_externally");
+  }
+
+  // The mask might have been edited externally, so check for changes when the user comes back
+  const onfocus = throttled(() => sendMessage(model, "import_external"));
+
   function changeBrushSize(factor: number) {
     brushSize = Math.round(Math.max(2, Math.min(400, brushSize * factor)));
   }
@@ -122,8 +135,11 @@
     { code: "KeyS", modifiers: ["ctrl"], callback: () => { save(); } },
     { code: "KeyI", callback: () => maskCanvas?.invert() },
     { code: "Delete", callback: () => maskCanvas?.clear() },
+    { code: "KeyK", callback: () => { editExternally(); } },
   ];
 </script>
+
+<svelte:window {onfocus} />
 
 <Viewer
   {model}
@@ -139,7 +155,8 @@
     { keys: [["Ctrl", "S"]], text: "save (also happens when switching images)" },
     { keys: [["I"]], text: "invert" },
     { keys: [["Del"]], text: "clear" },
-  ]}
+    { keys: [["K"]], text: "edit in the external editor" },
+]}
 >
   {#snippet imageContent(image)}
     {#if image.url && image.key == imageKey.value && maskUrl !== undefined && maskUrlFor == imageKey.value}
@@ -149,12 +166,8 @@
 
   {#snippet side()}
     <div class="flex flex-row gap-2">
-      <button class={["tool-btn", mode == "brush" ? "tool-btn--on" : "tool-btn--off"]} onclick={() => { mode = "brush"; }}>
-        <IconBrush class="w-4 h-4" /> Brush
-      </button>
-      <button class={["tool-btn", mode == "eraser" ? "tool-btn--on" : "tool-btn--off"]} onclick={() => { mode = "eraser"; }}>
-        <IconEraser class="w-4 h-4" /> Eraser
-      </button>
+      <Button icon={IconBrush} active={mode == "brush"} onclick={() => { mode = "brush"; }}>Brush</Button>
+      <Button icon={IconEraser} active={mode == "eraser"} onclick={() => { mode = "eraser"; }}>Eraser</Button>
     </div>
 
     <label class="flex flex-row items-center gap-3 text-sm text-slate-600">
@@ -164,31 +177,19 @@
     </label>
 
     <div class="flex flex-row flex-wrap gap-2">
-      <button class="tool-btn tool-btn--off" onclick={() => maskCanvas?.undo()}>
-        <IconUndo class="w-4 h-4" /> Undo
-      </button>
-      <button class="tool-btn tool-btn--off" onclick={() => maskCanvas?.invert()}>
-        <IconContrast class="w-4 h-4" /> Invert
-      </button>
-      <button class="tool-btn tool-btn--off" onclick={() => maskCanvas?.clear()}>
-        <IconCircleSlash class="w-4 h-4" /> Clear
-      </button>
+      <Button icon={IconUndo} onclick={() => maskCanvas?.undo()}>Undo</Button>
+      <Button icon={IconContrast} onclick={() => maskCanvas?.invert()}>Invert</Button>
+      <Button icon={IconCircleSlash} onclick={() => maskCanvas?.clear()}>Clear</Button>
     </div>
 
     <div class="flex flex-row flex-wrap items-center gap-2">
-      <button
-        class={["tool-btn", dirty ? "tool-btn--on" : "tool-btn--off"]}
-        disabled={!dirty || saving}
-        onclick={() => save()}
-      >
-        <IconSave class="w-4 h-4" /> {saving ? "Saving..." : "Save"}
-      </button>
+      <Button icon={IconSave} active={dirty} disabled={!dirty || saving} onclick={() => save()}>
+        {saving ? "Saving..." : "Save"}
+      </Button>
       {#if maskKey.value}
-        <button class="tool-btn tool-btn--off hover:text-red-700" onclick={deleteMask}>
-          <IconTrash class="w-4 h-4" /> Delete saved mask
-        </button>
+        <Button variant="danger" icon={IconTrash} onclick={deleteMask}>Delete saved mask</Button>
       {/if}
-      <span class="text-sm text-slate-500">
+<span class="text-sm text-slate-500">
         {#if dirty}
           Unsaved changes
         {:else if maskKey.value}
@@ -199,24 +200,19 @@
       </span>
     </div>
 
+    <div class="flex flex-row flex-wrap items-center gap-2">
+      <Button
+        icon={IconExternalLink}
+        onclick={editExternally}
+        title="Open the image and the mask as layers in the external editor (e.g. Krita). Saved changes are imported when you come back."
+      >
+        Edit in external editor
+      </Button>
+    </div>
+
     {#if saveError}
       <div class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">{saveError}</div>
     {/if}
   {/snippet}
 </Viewer>
 
-<style lang="postcss">
-  @reference "./app.css";
-
-  .tool-btn {
-    @apply flex flex-row items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg ring-1 disabled:opacity-50 transition-colors duration-100;
-  }
-
-  .tool-btn--on {
-    @apply bg-blue-100 text-blue-800 ring-blue-300 not-disabled:hover:bg-blue-50;
-  }
-
-  .tool-btn--off {
-    @apply bg-gray-50 text-gray-700 ring-gray-300 not-disabled:hover:bg-gray-100;
-  }
-</style>

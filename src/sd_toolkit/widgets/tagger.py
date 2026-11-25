@@ -14,6 +14,16 @@ from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.storage import load, save
 from sd_toolkit.widgets.base import Messages, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle
+from sd_toolkit.derived import DerivedImages
+
+
+type TagGroupsLike = (
+    typing.Iterable[TagGroup | TagsLike]
+    | typing.Mapping[str, TagGroup | TagsLike]
+)
+"""
+Either a list of groups, or a mapping of hotkeys to groups. Groups can be specified as just their tags.
+"""
 
 
 @define
@@ -53,9 +63,7 @@ class TagGroup:
         tags = Tags.cast(tags, clone=True)
         
         if hotkey is not None:
-            if not re.fullmatch(r"[a-zA-Z0-9]", hotkey):
-                raise ValueError("Hotkey must be a single number or letter key")
-            hotkey = hotkey.upper()
+            hotkey = TagGroup._normalize_hotkey(hotkey)
         
         scope_explicit = scope is not None
         if scope_explicit:
@@ -75,7 +83,46 @@ class TagGroup:
             scope_explicit=scope_explicit,
         )
     
-    def subgroups(self, *subgroups: TagGroup | TagsLike, inherit_scope: typing.Literal["auto"] | bool = "auto") -> typing.Self:
+    @staticmethod
+    def _normalize_hotkey(hotkey: str) -> str:
+        if not re.fullmatch(r"[a-zA-Z0-9]", hotkey):
+            raise ValueError(f"Hotkey must be a single number or letter key, got {hotkey!r}")
+        return hotkey.upper()
+    
+    @classmethod
+    def cast_all(cls, groups: TagGroupsLike) -> list[TagGroup]:
+        """
+        Converts the alternative formats (see `TagGroupsLike`) to a list of groups.
+        """
+        
+        if not isinstance(groups, typing.Mapping):
+            return [group if isinstance(group, TagGroup) else TagGroup(group) for group in groups]
+        
+        result: list[TagGroup] = []
+        for hotkey, group in groups.items():
+            if not isinstance(group, TagGroup):
+                result.append(TagGroup(group, hotkey=hotkey))
+                continue
+            
+            hotkey = TagGroup._normalize_hotkey(hotkey)
+            if group._hotkey is not None and group._hotkey != hotkey:
+                raise ValueError(f"Group {group._tags!r} is specified with two different hotkeys: {hotkey!r} and {group._hotkey!r}")
+            group._hotkey = hotkey
+            result.append(group)
+        
+        return result
+    
+    def subgroups(self, *subgroups: TagGroup | TagsLike | typing.Mapping[str, TagGroup | TagsLike], inherit_scope: typing.Literal["auto"] | bool = "auto") -> typing.Self:
+        """
+        Each argument may also be a mapping of hotkeys to subgroups.
+        """
+        
+        subgroups = tuple(
+            subgroup
+            for arg in subgroups
+            for subgroup in (TagGroup.cast_all(arg) if isinstance(arg, typing.Mapping) else [arg])
+        )
+        
         for subgroup in subgroups:
             if not isinstance(subgroup, TagGroup):
                 subgroup = TagGroup(subgroup)
@@ -212,22 +259,26 @@ class TaggerWidget(ImageViewerWidget):
     _originals: dict[pathlib.Path, Tags]
     _choices: SavedChoices
     _saved_choices_path: pathlib.Path | None
+    _promote_to: Tags | None
     
     def __init__(
         self,
         dataset: typing.Sequence[TaggedImage],
-        groups: typing.Iterable[TagGroup],
+        groups: TagGroupsLike,
         *,
         saved_choices: pathlib.Path | str | None = None,
         skip_reviewed: bool = True,
         auto_hotkeys: typing.Literal["top_level", "all", "none"] = "none",
         auto_promote: bool = False,
         info: InfoFunc | None = None,
+        derived: DerivedImages | None = None,
+        show_derived: bool = True,
         out: ipywidgets.Output | None = None,
     ):
         """
         :param dataset: The images to tag.
-        :param groups: The tags the widget will allow setting.
+        :param groups: The tags the widget will allow setting. See `TagGroupsLike` for the accepted formats,
+            e.g. `{"1": "solo, multiple girls", "c": TagGroup("cat").subgroups({"t": "tabby"})}`.
         :param saved_choices: The path to a file where the tag choices will be saved to and restored from.
             Setting this is highly recommended, as it will allow re-running the widget fully automatically.
             Note that this is different to a dataset checkpoint, as it only affects the specified tags.
@@ -242,10 +293,13 @@ class TaggerWidget(ImageViewerWidget):
         :param auto_promote: If `True`, automatically converts flat tags to their scoped variants present
             in the `groups`. See `Tags.promote_hierarchy` for more details.
         :param info: Computes additional properties to display for each image.
+        :param derived: If specified, enables creating edited copies of images, and shows the
+            derived images after their parents.
+        :param show_derived: Whether to show the images derived from each image right after it.
         :param out: If specified, the output of event handlers will be captured into it.
         """
         
-        groups = list(groups)
+        groups = TagGroup.cast_all(groups)
         
         combined_tags = Tags()
         for _, group in itertools.chain.from_iterable(
@@ -254,9 +308,7 @@ class TaggerWidget(ImageViewerWidget):
         ):
             combined_tags.add(group._tags)
         
-        if auto_promote:
-            for image in dataset:
-                image.tags.promote_hierarchy(combined_tags)
+        self._promote_to = combined_tags if auto_promote else None
         
         if saved_choices is not None:
             if isinstance(saved_choices, str):
@@ -274,18 +326,14 @@ class TaggerWidget(ImageViewerWidget):
         # - Clicking on the seekbar should skip forward unless shift is held, in which case it shouldn't skip.
         # - The event for switching image should have a skip direction parameter.
         
-        self._originals = {image.path: image.tags.clone() for image in dataset}
-        
-        starting_idx: int = 0
-        for i, image in enumerate(dataset):
-            was_reviewed: bool = self._choices.apply(image)
-            if i == starting_idx and was_reviewed and skip_reviewed:
-                starting_idx += 1
+        self._originals = {}
         
         super().__init__(
             dataset,
             info=info,
-            start_idx=starting_idx,
+            derived=derived,
+            show_derived=show_derived,
+            skip_reviewed=skip_reviewed,
             out=out,
             tag_groups=self._convert_groups(groups, auto_hotkeys),
             has_done_screen=True,
@@ -408,6 +456,19 @@ class TaggerWidget(ImageViewerWidget):
             self._update_mark(image)
     
     @typing.override
+    def _prepare_images(self, images: list[TaggedImage]) -> None:
+        for image in images:
+            if self._promote_to is not None:
+                image.tags.promote_hierarchy(self._promote_to)
+            
+            self._originals[image.path] = image.tags.clone()
+            self._choices.apply(image)
+    
+    @typing.override
+    def _is_reviewed(self, image: TaggedImage) -> bool:
+        return self._choices.has(image)
+    
+    @typing.override
     def _on_show(self, image: TaggedImage | None) -> None:
         self._refresh_tags()
         
@@ -443,4 +504,5 @@ class TaggerWidget(ImageViewerWidget):
 __all__ = [
     "TaggerWidget",
     "TagGroup",
+    "TagGroupsLike",
 ]

@@ -26,8 +26,10 @@ from sd_toolkit.widgets import (
     TagEditorWidget,
     MaskWidget,
     DeriveWidget,
+    AspectRatio,
+    CropWidget,
 )
-from sd_toolkit.derived import DerivedImages, img_derived_from, img_derivation
+from sd_toolkit.derived import DerivedImages, img_derived_from, img_derivation, img_crop_box
 from sd_toolkit.gallery_dl import BaseGalleryDLPost, BaraagPost, DanbooruPost, GelbooruPost, KemonoPost, MastodonPost, PawchivePost, PixivPost, UnknownPost
 from sd_toolkit.config import Config
 from sd_toolkit.autotag import (
@@ -76,9 +78,12 @@ __all__ = [
     "TagEditorWidget",
     "MaskWidget",
     "DeriveWidget",
+    "AspectRatio",
+    "CropWidget",
     "DerivedImages",
     "img_derived_from",
     "img_derivation",
+    "img_crop_box",
     "BaseGalleryDLPost",
     "BaraagPost",
     "DanbooruPost",

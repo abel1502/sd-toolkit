@@ -239,6 +239,7 @@ class TagEditorWidget(ImageViewerWidget):
     _edits: TagEdits
     _originals: dict[pathlib.Path, Tags]
     _conflicts: set[pathlib.Path]
+    _on_mismatch: OnMismatch
     _quick_actions: list[QuickAction]
     _make_tag: typing.Callable[[Tag], Tag]
     
@@ -253,6 +254,7 @@ class TagEditorWidget(ImageViewerWidget):
         vocabulary: TagsLike | None = None,
         info: InfoFunc | None = None,
         derived: DerivedImages | None = None,
+        show_derived: bool = True,
         start_idx: int = 0,
         out: ipywidgets.Output | None = None,
     ):
@@ -268,7 +270,9 @@ class TagEditorWidget(ImageViewerWidget):
         :param vocabulary: Additional tags to suggest when adding tags (the tags present in the
             dataset are always suggested).
         :param info: Computes additional properties to display for each image.
-        :param derived: If specified, enables creating edited copies of images.
+        :param derived: If specified, enables creating edited copies of images, and shows the
+            derived images after their parents.
+        :param show_derived: Whether to show the images derived from each image right after it.
         :param start_idx: The image to start at.
         :param out: If specified, the output of event handlers will be captured into it.
         """
@@ -282,11 +286,9 @@ class TagEditorWidget(ImageViewerWidget):
                 raise ValueError(f"Hotkey must be a single number or letter key, got {action.hotkey!r}")
         
         self._edits = TagEdits(saved_edits)
-        self._originals = {image.path: image.tags.clone() for image in dataset}
-        self._conflicts = {
-            image.path
-            for image in self._edits.apply(dataset, on_mismatch=on_mismatch)
-        }
+        self._on_mismatch = on_mismatch
+        self._originals = {}
+        self._conflicts = set()
         
         all_tags = Tags.cast(vocabulary, clone=True) if vocabulary is not None else Tags()
         for image in dataset:
@@ -298,6 +300,7 @@ class TagEditorWidget(ImageViewerWidget):
             dataset,
             info=info,
             derived=derived,
+            show_derived=show_derived,
             start_idx=start_idx,
             out=out,
             vocabulary=sorted({tag.to_hierarchical_str() for tag in all_tags}),
@@ -389,6 +392,16 @@ class TagEditorWidget(ImageViewerWidget):
             self.error = ""
             self._on_show(image)
             self._update_mark(image)
+    
+    @typing.override
+    def _prepare_images(self, images: list[TaggedImage]) -> None:
+        for image in images:
+            self._originals[image.path] = image.tags.clone()
+        
+        self._conflicts.update(
+            image.path
+            for image in self._edits.apply(images, on_mismatch=self._on_mismatch)
+        )
     
     @typing.override
     def _on_show(self, image: TaggedImage | None) -> None:

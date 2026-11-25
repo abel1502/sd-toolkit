@@ -1,15 +1,21 @@
 <script lang="ts">
   import IconPlus from "@lucide/svelte/icons/plus";
+  import IconCheck from "@lucide/svelte/icons/check";
+
+  import Button from "./Button.svelte";
 
   interface Props {
     vocabulary: string[];
-    /** Tags to exclude from suggestions (e.g. the ones already present). */
-    exclude?: Set<string>;
+    /**
+     * The tags the image already has. They're still suggested (to be completed as a namespace,
+     * i.e. `parent::`), but marked as present.
+     */
+    present?: Set<string>;
     onsubmit: (text: string) => void;
     input?: HTMLInputElement;
   };
 
-  let { vocabulary, exclude = new Set(), onsubmit, input = $bindable() }: Props = $props();
+  let { vocabulary, present = new Set(), onsubmit, input = $bindable() }: Props = $props();
 
   const MAX_SUGGESTIONS = 8;
 
@@ -34,7 +40,7 @@
     const otherMatches: string[] = [];
 
     for (const [tag, normalized] of normalizedVocabulary) {
-      if (exclude.has(tag) || normalized == fragment) continue;
+      if (normalized == fragment && !present.has(tag)) continue;
 
       if (normalized.startsWith(fragment) || normalized.includes("::" + fragment)) {
         prefixMatches.push(tag);
@@ -55,7 +61,9 @@
 
   function accept(suggestion: string) {
     const prefix = text.slice(0, fragmentStart);
-    text = (prefix ? prefix.trimEnd() + " " : "") + suggestion + ", ";
+    // Adding a present tag would do nothing, so it's completed as a namespace instead
+    const ending = present.has(suggestion) ? "::" : ", ";
+    text = (prefix ? prefix.trimEnd() + " " : "") + suggestion + ending;
     input?.focus();
   }
 
@@ -120,27 +128,29 @@
       onblur={() => { focused = false; }}
       oninput={() => { focused = true; }}
     />
-    <button
-      class="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg ring-1 ring-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 disabled:opacity-50"
-      disabled={!text.trim()}
-      onclick={submit}
-    >
-      <IconPlus class="w-4 h-4" />
-      Add
-    </button>
-  </div>
+    <Button variant="primary" icon={IconPlus} disabled={!text.trim()} onclick={submit}>Add</Button>
+</div>
 
   {#if focused && suggestions.length > 0}
     <ul class="absolute z-40 left-0 right-0 mt-1 py-1 bg-white border border-gray-300 rounded-lg shadow-md text-sm">
       {#each suggestions as suggestion, i (suggestion)}
         <li>
           <button
-            class={["w-full text-left px-3 py-1", i == highlighted ? "bg-blue-100" : "hover:bg-gray-100"]}
+            class={[
+              "w-full flex flex-row items-center gap-2 text-left px-3 py-1",
+              i == highlighted ? "bg-blue-100" : "hover:bg-gray-100",
+              present.has(suggestion) && "text-gray-500",
+            ]}
             onmousedown={(event) => { event.preventDefault(); accept(suggestion); }}
           >
             {suggestion}
+            {#if present.has(suggestion)}
+              <span class="ml-auto flex items-center gap-1 text-xs text-emerald-700" title="Already present, completes as parent::">
+                <IconCheck class="w-3.5 h-3.5" /> present
+              </span>
+            {/if}
           </button>
-        </li>
+</li>
       {/each}
     </ul>
   {/if}

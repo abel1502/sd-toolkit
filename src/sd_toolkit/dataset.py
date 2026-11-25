@@ -20,6 +20,7 @@ from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import save, load
 from sd_toolkit.config import Config
 from sd_toolkit.misc import open_file
+from sd_toolkit.widgets.viewer import InfoFunc
 if typing.TYPE_CHECKING:
     from sd_toolkit.diff import DatasetDiff
     from sd_toolkit.widgets import PreviewWidget
@@ -239,7 +240,7 @@ class Dataset(typing.Sequence[TaggedImage]):
     def preview(
         self,
         *,
-        info: typing.Callable[[TaggedImage], typing.Mapping[str, typing.Any]] | None = None,
+        info: InfoFunc | None = None,
     ) -> PreviewWidget:
         """
         :param info: Computes additional properties to display for each image.

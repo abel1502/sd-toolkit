@@ -109,6 +109,7 @@ class SelectionWidget(ImageViewerWidget):
         auto_advance: bool = True,
         info: InfoFunc | None = None,
         derived: DerivedImages | None = None,
+        show_derived: bool = True,
         out: ipywidgets.Output | None = None,
     ):
         """
@@ -119,24 +120,20 @@ class SelectionWidget(ImageViewerWidget):
         :param skip_reviewed: If `True`, the widget starts at the first image without an explicit choice.
         :param auto_advance: If `True`, making a choice advances to the next image.
         :param info: Computes additional properties to display for each image.
-        :param derived: If specified, enables creating edited copies of images.
+        :param derived: If specified, enables creating edited copies of images, and shows the
+            derived images after their parents.
+        :param show_derived: Whether to show the images derived from each image right after it.
         :param out: If specified, the output of event handlers will be captured into it.
         """
         
         self._selection = Selection(saved_selection, default=default)
         
-        start_idx = 0
-        if skip_reviewed:
-            start_idx = next(
-                (i for i, image in enumerate(dataset) if self._selection.get(image) is None),
-                len(dataset),
-            )
-        
         super().__init__(
             dataset,
             info=info,
             derived=derived,
-            start_idx=start_idx,
+            show_derived=show_derived,
+            skip_reviewed=skip_reviewed,
             out=out,
             default_choice=default,
             auto_advance=auto_advance,
@@ -182,6 +179,10 @@ class SelectionWidget(ImageViewerWidget):
             
             if self.auto_advance and msg.choice is not None:
                 self.go_to(self.image_idx + 1)
+    
+    @typing.override
+    def _is_reviewed(self, image: TaggedImage) -> bool:
+        return self._selection.get(image) is not None
     
     @typing.override
     def _on_show(self, image: TaggedImage | None) -> None:

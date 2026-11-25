@@ -9,6 +9,7 @@
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
   import Viewer from "./Viewer.svelte";
+  import Toggle from "./Toggle.svelte";
 
   type Traits = ViewerTraits & {
     choice: boolean | null;
@@ -33,11 +34,14 @@
     sendMessage(model, "set_choice", { choice: value });
   }
 
+  // S/D are next to each other on the home row, so they're easy to reach with the left hand
+  // while the right one navigates with the arrows. Y/N are kept as mnemonic alternatives.
   const shortcuts: Shortcut[] = [
+    { code: "KeyS", callback: () => setChoice(true) },
     { code: "KeyY", callback: () => setChoice(true) },
-    { code: "Digit1", callback: () => setChoice(true) },
+    { code: "KeyD", callback: () => setChoice(false) },
     { code: "KeyN", callback: () => setChoice(false) },
-    { code: "Digit0", callback: () => setChoice(false) },
+    { code: "KeyA", callback: () => setChoice(null) },
     { code: "Backspace", callback: () => setChoice(null) },
   ];
 </script>
@@ -47,10 +51,10 @@
   {loader}
   {shortcuts}
   help={[
-    { keys: [["Y"], ["1"]], text: "select" },
-    { keys: [["N"], ["0"]], text: "reject" },
-    { keys: [["Backspace"]], text: "reset to default" },
-  ]}
+    { keys: [["S"], ["Y"]], text: "select" },
+    { keys: [["D"], ["N"]], text: "reject" },
+    { keys: [["A"], ["Backspace"]], text: "reset to default" },
+]}
 >
   {#snippet side()}
     <div class="flex flex-row gap-3">
@@ -63,7 +67,8 @@
       >
         <IconCircleCheck class="w-6 h-6" />
         Select
-      </button>
+        <kbd class="choice-kbd">S</kbd>
+</button>
       <button
         class={[
           "choice-btn",
@@ -73,7 +78,8 @@
       >
         <IconCircleX class="w-6 h-6" />
         Reject
-      </button>
+        <kbd class="choice-kbd">D</kbd>
+</button>
     </div>
 
     <div class="flex flex-row items-center gap-3 text-sm text-slate-600">
@@ -89,15 +95,10 @@
       {/if}
     </div>
 
-    <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-      <input
-        type="checkbox"
-        checked={autoAdvance.value}
-        onchange={(event) => { autoAdvance.value = event.currentTarget.checked; }}
-      />
+    <Toggle size="sm" class="text-sm text-slate-600" bind:checked={autoAdvance.value}>
       Advance to the next image after choosing
-    </label>
-  {/snippet}
+    </Toggle>
+{/snippet}
 </Viewer>
 
 <style lang="postcss">
@@ -105,5 +106,9 @@
 
   .choice-btn {
     @apply flex-1 flex flex-row items-center justify-center gap-2 py-4 rounded-lg ring-1 text-lg font-semibold transition-colors duration-100;
+  }
+
+  .choice-kbd {
+    @apply ml-1 px-1.5 text-xs font-semibold rounded-md ring-1 ring-current/30 opacity-70;
   }
 </style>

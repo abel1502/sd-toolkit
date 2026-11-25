@@ -29,6 +29,7 @@ class PreviewWidget(ImageViewerWidget):
         *,
         info: InfoFunc | None = None,
         derived: DerivedImages | None = None,
+        show_derived: bool = True,
         start_idx: int = 0,
         out: ipywidgets.Output | None = None,
     ):
@@ -36,6 +37,7 @@ class PreviewWidget(ImageViewerWidget):
         :param dataset: The images to show.
         :param info: Computes additional properties to display for each image.
         :param derived: If specified, enables creating edited copies of images.
+        :param show_derived: Whether to show the images derived from each image right after it.
         :param start_idx: The image to start at.
         :param out: If specified, the output of event handlers will be captured into it.
         """
@@ -44,6 +46,7 @@ class PreviewWidget(ImageViewerWidget):
             dataset,
             info=info,
             derived=derived,
+            show_derived=show_derived,
             start_idx=start_idx,
             out=out,
         )
