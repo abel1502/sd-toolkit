@@ -245,6 +245,7 @@ class RevertImageMessage:
 # - The interactive pass discards the metadata on every tag the user touches, because it takes the tag string from the front-end message.
 # - The non-interactive pass applies the metadata as it is in the tag group definitions.
 # This is good for some metadata, like tag confidence, but bad for stuff like tag danbooru category.
+# I suppose we should replace the metadata with the one from the group definitions in every case. Categories will be lost, but the right way to eventually fix it is to iinfer (or manually add) the categories for the group definition tags
 class TaggerWidget(ImageViewerWidget):
     _component: str = traitlets.Unicode("tagger").tag(sync=True)
     
@@ -471,12 +472,12 @@ class TaggerWidget(ImageViewerWidget):
     @typing.override
     def _on_show(self, image: TaggedImage | None) -> None:
         self._refresh_tags()
-        
+    
     @typing.override
     def _on_leave(self, image: TaggedImage) -> None:
         # TODO: Should apply when advancing to next image after looking, but not when skimming through quickly...
         self._record_choices(image)
-        
+    
     @typing.override
     def _mark(self, image: TaggedImage) -> int:
         return int(self._choices.has(image))

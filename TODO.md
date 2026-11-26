@@ -13,7 +13,7 @@
 - Add danbooru tag database knowledge (currently only pixiv aliases, perhaps also category inference and more)
 - Add LLM-powered autotagging for OCR
 - Derived images (`DerivedImages`):
-  - Add video and ugoira (zip) frame extraction
+  - Add video and ugoira (zip) frame extraction. Programmatic and with widget.
   - Settle the semantics (immutability/locking, tag inheritance, interaction with `Dataset.filter`, garbage collection, mask export layout for AI-toolkit)
 - Automatic tag refinement: pick the subset of a source's tags that applies to a particular image (e.g. a crop of a tagged image, or one image of a multi-image pixiv post, where the post's tags apply to all of them), possibly adding common extras like `cropped, out_of_frame`
 - `TagEditorWidget` UX:
@@ -42,4 +42,4 @@
     - "set up a directory for a lora" (templated `./scrape.ps1` + `.vscode` + `anima/[name].ipynb`)
     - May need to be at least partially defined within user config
 - Maybe rename `TaggerWidget` and `SavedChoices`? Would need to alias for compat though, so maybe not
-
+- Video support in some way?
