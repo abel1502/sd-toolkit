@@ -20,8 +20,8 @@ from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import save, load
 from sd_toolkit.config import Config
 from sd_toolkit.misc import open_file
-from sd_toolkit.widgets.viewer import InfoFunc
 if typing.TYPE_CHECKING:
+    from sd_toolkit.widgets.viewer import InfoFunc
     from sd_toolkit.diff import DatasetDiff
     from sd_toolkit.widgets import PreviewWidget
 from sd_toolkit.metadata import Metadata, MetadataUpdate, MetadataField

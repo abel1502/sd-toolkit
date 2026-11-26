@@ -11,9 +11,9 @@
   import Viewer from "./Viewer.svelte";
   import Button from "./Button.svelte";
   import Thumbnail from "./Thumbnail.svelte";
-  import CropCanvas, { boxSize, reshapeBox, scaleBox, type Box, type Ratio } from "./CropCanvas.svelte";
+  import CropCanvas, { boxSize, fits, resizeBox, scaleBox, type Box, type Size } from "./CropCanvas.svelte";
 
-  interface AspectRatio {
+  interface CropSize {
     label: string;
     width: number | null;
     height: number | null;
@@ -27,7 +27,7 @@
   };
 
   type Traits = ViewerTraits & {
-    aspect_ratios: AspectRatio[];
+    crop_sizes: CropSize[];
     crops: CropInfo[];
     image_size: [number, number];
   };
@@ -40,19 +40,20 @@
   onDestroy(() => loader.dispose());
 
   const imageKey = useTrait(model, "image_key");
-  const aspectRatios = useTrait(model, "aspect_ratios");
+  const cropSizes = useTrait(model, "crop_sizes");
   const crops = useTrait(model, "crops");
   const imageSize = useTrait(model, "image_size");
 
-  let ratioIdx: number = $state(0);
-  let sizeFraction: number = $state(1);
+  let sizeIdx: number = $state(0);
   let selected: string | null = $state(null);
   let error: string | null = $state(null);
 
-  let ratio: Ratio = $derived.by(() => {
-    const value = aspectRatios.value[ratioIdx];
+  function toSize(value: CropSize | undefined): Size {
     return value && value.width && value.height ? { width: value.width, height: value.height } : null;
-  });
+  }
+
+  let size: Size = $derived(toSize(cropSizes.value[sizeIdx]));
+  let sizeFits = $derived(fits(size, imageSize.value));
 
   let selectedCrop = $derived(crops.value.find(crop => crop.path == selected) ?? null);
 
@@ -63,16 +64,9 @@
     error = null;
   });
 
-  function gcd(a: number, b: number): number {
-    return b ? gcd(b, a % b) : a;
-  }
-
   function describe(box: Box): string {
     const [w, h] = boxSize(box);
-    const divisor = gcd(w, h);
-    const exact = aspectRatios.value.find(r => r.width && r.height && w * r.height == h * r.width);
-    const proportions = exact ? exact.label : divisor > 1 && w / divisor <= 64 ? `${w / divisor}:${h / divisor}` : (w / h).toFixed(3);
-    return `${w}×${h} (${proportions})`;
+    return `${w}×${h}`;
   }
 
   async function commit(path: string | null, box: Box) {
@@ -85,13 +79,13 @@
     }
   }
 
-  function selectRatio(idx: number) {
-    if (idx >= aspectRatios.value.length) return;
-    ratioIdx = idx;
+  function selectSize(idx: number) {
+    if (idx >= cropSizes.value.length) return;
+    sizeIdx = idx;
 
     // Also applies to the selected crop
-    if (selectedCrop && !selectedCrop.locked && ratio) {
-      const box = reshapeBox(selectedCrop.box, ratio, imageSize.value);
+    if (selectedCrop && !selectedCrop.locked && size && sizeFits) {
+      const box = resizeBox(selectedCrop.box, size, imageSize.value);
       if (box.some((value, i) => value != selectedCrop!.box[i])) {
         commit(selectedCrop.path, box);
       }
@@ -99,8 +93,8 @@
   }
 
   function resizeSelected(factor: number) {
-    if (!selectedCrop || selectedCrop.locked) return;
-    commit(selectedCrop.path, scaleBox(selectedCrop.box, factor, ratio, imageSize.value));
+    if (!selectedCrop || selectedCrop.locked || size) return;
+    commit(selectedCrop.path, scaleBox(selectedCrop.box, factor, imageSize.value));
   }
 
   const confirmDelete = new TwoStepConfirm<string>();
@@ -113,9 +107,9 @@
   }
 
   let shortcuts: Shortcut[] = $derived([
-    ...aspectRatios.value.slice(0, 9).map((_, idx) => ({
+    ...cropSizes.value.slice(0, 9).map((_, idx) => ({
       code: `Digit${idx + 1}`,
-      callback: () => selectRatio(idx),
+      callback: () => selectSize(idx),
     })),
     {
       code: "Delete",
@@ -133,8 +127,8 @@
   {shortcuts}
   areaClass="h-[36rem]"
   help={[
-    { keys: [["1"], ["..."], ["9"]], text: "proportions" },
-    { keys: [["["], ["]"]], text: "resize the selected crop" },
+    { keys: [["1"], ["..."], ["9"]], text: "crop size" },
+    { keys: [["["], ["]"]], text: "scale the selected crop (free size only)" },
     { keys: [["Del"]], text: "delete the selected crop (press twice)" },
     { keys: [["Esc"]], text: "deselect" },
   ]}
@@ -146,8 +140,7 @@
         imageSize={imageSize.value}
         crops={crops.value}
         bind:selected
-        {ratio}
-        {sizeFraction}
+        {size}
         oncommit={commit}
       />
     {/if}
@@ -155,32 +148,35 @@
 
   {#snippet side()}
     <div class="flex flex-col gap-1">
-      <span class="text-sm font-semibold text-slate-600">Proportions</span>
+      <span class="text-sm font-semibold text-slate-600">Crop size</span>
       <div class="flex flex-row flex-wrap gap-2">
-        {#each aspectRatios.value as aspectRatio, idx}
-          <Button active={idx == ratioIdx} onclick={() => selectRatio(idx)}>
+        {#each cropSizes.value as cropSize, idx}
+          {@const tooLarge = !fits(toSize(cropSize), imageSize.value)}
+          <Button
+            active={idx == sizeIdx}
+            class={tooLarge ? "line-through opacity-60" : ""}
+            title={tooLarge ? "Larger than this image" : undefined}
+            onclick={() => selectSize(idx)}
+          >
             {#if idx < 9}
               <span class="font-semibold text-slate-500">{idx + 1}</span>
             {/if}
-            {aspectRatio.label}
+            {cropSize.label}
           </Button>
         {/each}
       </div>
     </div>
 
-    <label class="flex flex-row items-center gap-3 text-sm text-slate-600">
-      Size of new crops
-      <input type="range" min="0.1" max="1" step="0.05" bind:value={sizeFraction} class="flex-1" />
-      <span class="w-12 text-right">{Math.round(sizeFraction * 100)}%</span>
-    </label>
-
     <p class="text-xs text-slate-500">
-      {#if ratio}
-        Click the image to create a crop centered there, or drag to draw one.
+      {#if size && !sizeFits}
+        <span class="text-amber-700">This image is only {imageSize.value[0]}×{imageSize.value[1]}, too small for {size.width}×{size.height} crops.</span>
+      {:else if size}
+        Click the image to place a crop centered there (or drag to position it).
+        Drag a crop to move it.
       {:else}
-        Drag on the image to draw a crop.
+        Drag on the image to draw a crop. Drag a crop to move it, its handles to resize it, or scroll over it to scale it.
       {/if}
-      Drag a crop to move it, its handles to resize it, or scroll over it to scale it.
+      Crops are never rescaled.
     </p>
 
     {#if error}

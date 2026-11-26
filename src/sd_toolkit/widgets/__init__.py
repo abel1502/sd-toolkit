@@ -5,7 +5,7 @@ from .selection import Selection, SelectionWidget
 from .tag_editor import TagEdits, QuickAction, TagEditorWidget
 from .mask import MaskWidget
 from .derive import DeriveWidget
-from .crop import AspectRatio, CropWidget
+from .crop import CropSize, CropWidget
 
 __all__ = [
     "ImageViewerWidget",
@@ -20,6 +20,6 @@ __all__ = [
     "TagEditorWidget",
     "MaskWidget",
     "DeriveWidget",
-    "AspectRatio",
+    "CropSize",
     "CropWidget",
 ]

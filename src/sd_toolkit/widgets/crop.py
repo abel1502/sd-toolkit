@@ -1,6 +1,5 @@
 import typing
 import pathlib
-import fractions
 import re
 
 import ipywidgets
@@ -16,9 +15,9 @@ from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle, im
 
 
 @define
-class AspectRatio:
+class CropSize:
     """
-    A crop proportion, as `width:height`. `None` means any proportions.
+    The exact size of crops, in pixels (crops are never rescaled). `None` means any size.
     """
     
     label: str
@@ -28,43 +27,44 @@ class AspectRatio:
     FREE_LABELS: typing.ClassVar[frozenset[str]] = frozenset({"free", "any", ""})
     
     @classmethod
-    def cast(cls, value: AspectRatioLike) -> AspectRatio:
+    def cast(cls, value: CropSizeLike) -> CropSize:
         match value:
-            case AspectRatio():
+            case CropSize():
                 return value
             case None:
                 return cls("Free", None, None)
             case str() if value.strip().lower() in cls.FREE_LABELS:
                 return cls("Free", None, None)
             case str():
-                match = re.fullmatch(r"\s*(\d+)\s*[:x/]\s*(\d+)\s*", value)
+                match = re.fullmatch(r"\s*(\d+)\s*(?:[x×*,]\s*(\d+)\s*)?", value)
                 if match is None:
-                    raise ValueError(f"Invalid aspect ratio {value!r}, expected something like '3:4'")
-                return cls.of(int(match.group(1)), int(match.group(2)), label=value.strip())
+                    raise ValueError(f"Invalid crop size {value!r}, expected something like '768x1024'")
+                width = int(match.group(1))
+                return cls.of(width, int(match.group(2) or width))
+            case int():
+                return cls.of(value, value)
             case (int() as width, int() as height):
                 return cls.of(width, height)
-            case int() | float():
-                ratio = fractions.Fraction(value).limit_denominator(64)
-                return cls.of(ratio.numerator, ratio.denominator, label=f"{value:g}")
             case _:
-                raise TypeError(f"Cannot convert {value!r} to an aspect ratio")
+                raise TypeError(f"Cannot convert {value!r} to a crop size")
     
     @classmethod
-    def of(cls, width: int, height: int, *, label: str | None = None) -> AspectRatio:
+    def of(cls, width: int, height: int) -> CropSize:
         if width <= 0 or height <= 0:
-            raise ValueError(f"Invalid aspect ratio {width}:{height}")
+            raise ValueError(f"Invalid crop size {width}x{height}")
         
-        ratio = fractions.Fraction(width, height)
-        return cls(label or f"{width}:{height}", ratio.numerator, ratio.denominator)
+        return cls(f"{width}×{height}", width, height)
 
 
-type AspectRatioLike = AspectRatio | str | float | tuple[int, int] | None
+type CropSizeLike = CropSize | str | int | tuple[int, int] | None
 """
-E.g. `"3:4"`, `(3, 4)` or `0.75`. `None` or `"free"` means any proportions.
+E.g. `"768x1024"`, `(768, 1024)`, or `1024` for a square. `None` or `"free"` means any size.
 """
 
 
-DEFAULT_ASPECT_RATIOS: tuple[AspectRatioLike, ...] = ("1:1", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", None)
+DEFAULT_CROP_SIZES: tuple[CropSizeLike, ...] = (
+    "1024x1024", "768x1024", "1024x768", "832x1216", "1216x832", "512x512", None,
+)
 
 
 @define
@@ -109,9 +109,9 @@ class CropWidget(ImageViewerWidget):
     _component: str = traitlets.Unicode("crop").tag(sync=True)
     
     # Traitlets (Py -> JS)
-    aspect_ratios: list[AspectRatio] = traitlets.List(default_value=[]).tag(
+    crop_sizes: list[CropSize] = traitlets.List(default_value=[]).tag(
         sync=True,
-        **use_cattrs(list[AspectRatio]),
+        **use_cattrs(list[CropSize]),
     )
     crops: list[CropInfo] = traitlets.List(default_value=[]).tag(
         sync=True,
@@ -126,7 +126,7 @@ class CropWidget(ImageViewerWidget):
         dataset: typing.Sequence[TaggedImage],
         derived: DerivedImages,
         *,
-        aspect_ratios: typing.Iterable[AspectRatioLike] = DEFAULT_ASPECT_RATIOS,
+        crop_sizes: typing.Iterable[CropSizeLike] = DEFAULT_CROP_SIZES,
         show_derived: bool = False,
         info: InfoFunc | None = None,
         start_idx: int = 0,
@@ -135,8 +135,8 @@ class CropWidget(ImageViewerWidget):
         """
         :param dataset: The images to crop.
         :param derived: Where to store the crops.
-        :param aspect_ratios: The proportions to offer (see `AspectRatioLike`). The first nine get
-            digit hotkeys.
+        :param crop_sizes: The crop sizes to offer (see `CropSizeLike`). The first nine get digit
+            hotkeys. Crops are never rescaled, so fixed sizes keep the original pixel density.
         :param show_derived: Whether to show the images derived from each image right after it
             (which allows cropping crops, for example).
         :param info: Computes additional properties to display for each image.
@@ -151,7 +151,7 @@ class CropWidget(ImageViewerWidget):
             show_derived=show_derived,
             start_idx=start_idx,
             out=out,
-            aspect_ratios=[AspectRatio.cast(ratio) for ratio in aspect_ratios],
+            crop_sizes=[CropSize.cast(size) for size in crop_sizes],
             mark_styles=[None, MarkStyle("Cropped", "#0891b2")],
         )
     
@@ -251,8 +251,8 @@ class CropWidget(ImageViewerWidget):
 
 
 __all__ = [
-    "AspectRatio",
-    "AspectRatioLike",
-    "DEFAULT_ASPECT_RATIOS",
+    "CropSize",
+    "CropSizeLike",
+    "DEFAULT_CROP_SIZES",
     "CropWidget",
 ]

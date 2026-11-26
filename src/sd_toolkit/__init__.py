@@ -26,7 +26,7 @@ from sd_toolkit.widgets import (
     TagEditorWidget,
     MaskWidget,
     DeriveWidget,
-    AspectRatio,
+    CropSize,
     CropWidget,
 )
 from sd_toolkit.derived import DerivedImages, img_derived_from, img_derivation, img_crop_box
@@ -78,7 +78,7 @@ __all__ = [
     "TagEditorWidget",
     "MaskWidget",
     "DeriveWidget",
-    "AspectRatio",
+    "CropSize",
     "CropWidget",
     "DerivedImages",
     "img_derived_from",

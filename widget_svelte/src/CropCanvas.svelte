@@ -2,8 +2,8 @@
   /** `[left, top, right, bottom]`, in image pixels. */
   export type Box = [number, number, number, number];
 
-  /** Exact integer proportions, or `null` for any proportions. */
-  export type Ratio = { width: number, height: number } | null;
+  /** The exact size of crops in pixels, or `null` for any size. */
+  export type Size = { width: number, height: number } | null;
 
   export interface CanvasCrop {
     path: string;
@@ -16,8 +16,7 @@
   /** Which sides of the box a handle moves, e.g. `"nw"` or `"e"`. */
   type Handle = "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w";
 
-  const CORNERS: Handle[] = ["nw", "ne", "sw", "se"];
-  const EDGES: Handle[] = ["n", "s", "e", "w"];
+  const HANDLES: Handle[] = ["nw", "ne", "sw", "se", "n", "s", "e", "w"];
 
   /** Boxes smaller than this (in image pixels) aren't created. */
   const MIN_SIZE = 8;
@@ -26,47 +25,28 @@
     return [box[2] - box[0], box[3] - box[1]];
   }
 
-  /**
-   * The largest box with the given proportions fitting into the image, scaled by `fraction`,
-   * and centered at `center` as closely as the image bounds allow.
-   */
-  export function centeredBox(center: Point, ratio: Ratio, imageSize: [number, number], fraction: number = 1): Box {
-    const [width, height] = imageSize;
-
-    let w: number;
-    let h: number;
-    if (ratio) {
-      const k = Math.max(1, Math.floor(Math.min(width / ratio.width, height / ratio.height) * fraction));
-      [w, h] = [ratio.width * k, ratio.height * k];
-    } else {
-      [w, h] = [Math.round(width * fraction), Math.round(height * fraction)];
-    }
-
-    return placeBox(center, w, h, imageSize);
+  export function fits(size: Size, [width, height]: [number, number]): boolean {
+    return !size || (size.width <= width && size.height <= height);
   }
 
-  /** Resizes the box to the given proportions, keeping its center and (roughly) its area. */
-  export function reshapeBox(box: Box, ratio: Ratio, imageSize: [number, number]): Box {
-    if (!ratio) return box;
-
-    const [w, h] = boxSize(box);
-    const kMax = Math.floor(Math.min(imageSize[0] / ratio.width, imageSize[1] / ratio.height));
-    const k = Math.max(1, Math.min(kMax, Math.round(Math.sqrt((w * h) / (ratio.width * ratio.height)))));
-
-    return placeBox(boxCenter(box), ratio.width * k, ratio.height * k, imageSize);
+  /** A box of the given size centered at `center`, as closely as the image bounds allow. */
+  export function placeBox(center: Point, w: number, h: number, [width, height]: [number, number]): Box {
+    w = Math.min(w, width);
+    h = Math.min(h, height);
+    const left = Math.round(Math.max(0, Math.min(width - w, center[0] - w / 2)));
+    const top = Math.round(Math.max(0, Math.min(height - h, center[1] - h / 2)));
+    return [left, top, left + w, top + h];
   }
 
-  /** Scales the box around its center, keeping exact proportions if specified. */
-  export function scaleBox(box: Box, factor: number, ratio: Ratio, imageSize: [number, number]): Box {
+  /** Changes the box to the given size, keeping its center. */
+  export function resizeBox(box: Box, size: Size, imageSize: [number, number]): Box {
+    if (!size) return box;
+    return placeBox(boxCenter(box), size.width, size.height, imageSize);
+  }
+
+  /** Scales the box around its center (for free-size crops). */
+  export function scaleBox(box: Box, factor: number, imageSize: [number, number]): Box {
     const [w, h] = boxSize(box);
-
-    if (ratio && w * ratio.height == h * ratio.width) {
-      const k = w / ratio.width;
-      const kMax = Math.floor(Math.min(imageSize[0] / ratio.width, imageSize[1] / ratio.height));
-      const newK = Math.max(1, Math.min(kMax, factor > 1 ? Math.max(k + 1, Math.round(k * factor)) : Math.min(k - 1, Math.round(k * factor))));
-      return placeBox(boxCenter(box), ratio.width * newK, ratio.height * newK, imageSize);
-    }
-
     const scale = Math.min(factor, imageSize[0] / w, imageSize[1] / h);
     return placeBox(boxCenter(box), Math.max(MIN_SIZE, Math.round(w * scale)), Math.max(MIN_SIZE, Math.round(h * scale)), imageSize);
   }
@@ -75,36 +55,17 @@
     return [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
   }
 
-  function placeBox(center: Point, w: number, h: number, [width, height]: [number, number]): Box {
-    w = Math.min(w, width);
-    h = Math.min(h, height);
-    const left = Math.round(Math.max(0, Math.min(width - w, center[0] - w / 2)));
-    const top = Math.round(Math.max(0, Math.min(height - h, center[1] - h / 2)));
-    return [left, top, left + w, top + h];
-  }
-
   /**
    * A box spanned between a fixed `anchor` corner and `point`, limited to the image.
    * `axes` says which dimensions follow the point (the others are taken from `base`).
    */
-  function spanBox(anchor: Point, point: Point, ratio: Ratio, [width, height]: [number, number], base: Box | null = null, axes: [boolean, boolean] = [true, true]): Box {
+  function spanBox(anchor: Point, point: Point, [width, height]: [number, number], base: Box | null = null, axes: [boolean, boolean] = [true, true]): Box {
     const dx = point[0] - anchor[0];
     const dy = point[1] - anchor[1];
     const sx = dx < 0 ? -1 : 1;
     const sy = dy < 0 ? -1 : 1;
-    const maxW = sx > 0 ? width - anchor[0] : anchor[0];
-    const maxH = sy > 0 ? height - anchor[1] : anchor[1];
-
-    let w: number;
-    let h: number;
-    if (ratio) {
-      const kMax = Math.floor(Math.min(maxW / ratio.width, maxH / ratio.height));
-      const k = Math.max(0, Math.min(kMax, Math.round(Math.max(Math.abs(dx) / ratio.width, Math.abs(dy) / ratio.height))));
-      [w, h] = [ratio.width * k, ratio.height * k];
-    } else {
-      w = Math.round(Math.min(Math.abs(dx), maxW));
-      h = Math.round(Math.min(Math.abs(dy), maxH));
-    }
+    const w = Math.round(Math.min(Math.abs(dx), sx > 0 ? width - anchor[0] : anchor[0]));
+    const h = Math.round(Math.min(Math.abs(dy), sy > 0 ? height - anchor[1] : anchor[1]));
 
     let [left, top, right, bottom]: Box = [
       sx > 0 ? anchor[0] : anchor[0] - w,
@@ -136,15 +97,16 @@
     crops: CanvasCrop[];
     /** The path of the selected crop. */
     selected: string | null;
-    /** The proportions for new (and resized) crops. */
-    ratio: Ratio;
-    /** The size of crops created by clicking, relative to the largest possible one. */
-    sizeFraction: number;
+    /**
+     * The size of new crops. If set, clicking (or dragging) on the image places a crop of this size.
+     * Otherwise, crops are drawn by dragging and can be resized freely.
+     */
+    size: Size;
     /** Creates (`path == null`) or replaces a crop. Should resolve once the crops are updated. */
     oncommit: (path: string | null, box: Box) => Promise<void>;
   };
 
-  let { imageUrl, imageSize, crops, selected = $bindable(), ratio, sizeFraction, oncommit }: Props = $props();
+  let { imageUrl, imageSize, crops, selected = $bindable(), size, oncommit }: Props = $props();
 
   let containerWidth = $state(0);
   let containerHeight = $state(0);
@@ -159,6 +121,7 @@
   type Drag =
     | { kind: "pending", start: Point, screenStart: Point }
     | { kind: "draw", anchor: Point }
+    | { kind: "place" }
     | { kind: "move", path: string, original: Box, start: Point }
     | { kind: "resize", path: string, original: Box, handle: Handle };
 
@@ -195,7 +158,8 @@
     return [x, y];
   }
 
-  let handles: Handle[] = $derived(ratio ? CORNERS : [...CORNERS, ...EDGES]);
+  // Fixed-size crops can only be moved
+  let handles: Handle[] = $derived(size ? [] : HANDLES);
 
   function hitHandle(box: Box, point: Point): Handle | null {
     for (const handle of handles) {
@@ -239,6 +203,14 @@
       return;
     }
 
+    if (size) {
+      if (!fits(size, imageSize)) return;
+      selected = null;
+      drag = { kind: "place" };
+      draft = { path: null, box: placeBox(point, size.width, size.height, imageSize) };
+      return;
+    }
+
     drag = { kind: "pending", start: point, screenStart: [event.clientX, event.clientY] };
   }
 
@@ -253,11 +225,14 @@
         if (moved < 5) return;
         drag = { kind: "draw", anchor: [Math.round(drag.start[0]), Math.round(drag.start[1])] };
         selected = null;
-        draft = { path: null, box: spanBox(drag.anchor, point, ratio, imageSize) };
+        draft = { path: null, box: spanBox(drag.anchor, point, imageSize) };
         break;
       }
       case "draw":
-        draft = { path: null, box: spanBox(drag.anchor, point, ratio, imageSize) };
+        draft = { path: null, box: spanBox(drag.anchor, point, imageSize) };
+        break;
+      case "place":
+        draft = { path: null, box: placeBox(point, size!.width, size!.height, imageSize) };
         break;
       case "move": {
         const [w, h] = boxSize(drag.original);
@@ -274,7 +249,7 @@
           .toLowerCase() as Handle;
         const anchor = handlePoint(drag.original, opposite);
         const axes: [boolean, boolean] = [/[ew]/.test(handle), /[ns]/.test(handle)];
-        draft = { path: drag.path, box: spanBox(anchor, point, ratio, imageSize, drag.original, axes) };
+        draft = { path: drag.path, box: spanBox(anchor, point, imageSize, drag.original, axes) };
         break;
       }
     }
@@ -287,13 +262,9 @@
     drag = null;
 
     if (finished.kind == "pending") {
+      // Without a fixed size, there's no sensible box to create from a click
       draft = null;
-      if (ratio === null) {
-        // Without fixed proportions, there's no sensible box to create from a click
-        selected = null;
-        return;
-      }
-      commit(null, centeredBox(finished.start, ratio, imageSize, sizeFraction));
+      selected = null;
       return;
     }
 
@@ -302,7 +273,7 @@
       return;
     }
 
-    if (finished.kind != "draw" && sameBox(draft.box, finished.original)) {
+    if ((finished.kind == "move" || finished.kind == "resize") && sameBox(draft.box, finished.original)) {
       draft = null;
       return;
     }
@@ -319,14 +290,14 @@
   }
 
   function onwheel(event: WheelEvent) {
-    if (!selectedCrop || selectedCrop.locked || drag) return;
+    if (!selectedCrop || selectedCrop.locked || drag || size) return;
     if (!contains(selectedCrop.box, toImage(event))) return;
 
     event.preventDefault();
 
     // The crop isn't updated until the burst of wheel events ends, so continue from the draft
     const current = draft?.path == selectedCrop.path ? draft.box : selectedCrop.box;
-    const box = scaleBox(current, event.deltaY < 0 ? 1.05 : 1 / 1.05, ratio, imageSize);
+    const box = scaleBox(current, event.deltaY < 0 ? 1.05 : 1 / 1.05, imageSize);
     if (!sameBox(box, current)) {
       commitDebounced(selectedCrop.path, box);
     }

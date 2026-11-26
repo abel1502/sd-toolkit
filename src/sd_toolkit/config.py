@@ -104,6 +104,15 @@ class Config:
         """
         
         return None
+    
+    @property
+    def editor_autofocus(self) -> bool:
+        """
+        Whether to bring the image editor's window to the front after opening a file in it
+        (Windows only, best-effort; see `focus_window_showing`).
+        """
+        
+        return True
 
 
 __all__ = [
