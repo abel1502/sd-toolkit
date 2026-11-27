@@ -7,8 +7,9 @@
   import IconInfo from "@lucide/svelte/icons/info";
   import IconImagePlus from "@lucide/svelte/icons/image-plus";
 
-  import type { AnyModel } from "./anywidget.svelte";
-  import { useTrait, sendMessage } from "./anywidget.svelte";
+  import type { AnyModel, Experimental } from "./anywidget.svelte";
+  import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
+  import { Notifier } from "./notifier.svelte";
   import type { ImageLoader } from "./imageLoader";
   import type { Shortcut, ShortcutHelp } from "./hotkeys";
   import type { ImageButton, SwitchImageEvent, ViewerImage, ViewerTraits } from "./types";
@@ -19,7 +20,10 @@
 
   interface Props {
     model: AnyModel<ViewerTraits>;
+    experimental: Experimental;
     loader: ImageLoader;
+    /** Shows status messages over the image. Pass one to show messages from the widget too. */
+    notifier?: Notifier;
     /** The panel to the right of the image. */
     side: Snippet;
     /** Replaces the plain image (e.g. to draw on top of it). */
@@ -36,7 +40,9 @@
 
   let {
     model,
+    experimental,
     loader,
+    notifier = new Notifier(),
     side,
     imageContent,
     imageButtons = [],
@@ -133,7 +139,11 @@
     ...(canEditCopy.value ? [{
       icon: IconImagePlus,
       title: "Create an edited copy",
-      onclick: () => sendMessage(_model, "edit_copy"),
+      onclick: () => notifier.track(
+        invoke(experimental, "edit_copy", {}),
+        "Creating an edited copy...",
+        "Opened the copy in the image editor",
+      ),
     }] : []),
     {
       icon: IconInfo,
@@ -143,7 +153,11 @@
     {
       icon: IconZoomIn,
       title: "Open in external viewer",
-      onclick: () => sendMessage(_model, "view_image"),
+      onclick: () => notifier.track(
+        invoke(experimental, "view_image", {}),
+        "Opening in the image viewer...",
+        "Opened in the image viewer",
+      ),
     },
   ]);
 
@@ -186,6 +200,7 @@
         {error}
         {badge}
         buttons={allButtons}
+        notice={notifier.current}
         content={imageContent && (imageUrl || loading) ? imageContentSnippet : undefined}
       />
 

@@ -8,7 +8,7 @@ from loguru import logger
 
 from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.derived import DerivedImages
-from sd_toolkit.widgets.base import Messages, use_cattrs
+from sd_toolkit.widgets.base import Messages, command, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle, image_key
 
 
@@ -21,7 +21,7 @@ class DerivedImageInfo:
 
 
 @define
-class OpenDerivedMessage:
+class OpenDerivedRequest:
     path: str
 
 
@@ -95,7 +95,6 @@ class DeriveWidget(ImageViewerWidget):
     
     messages: typing.ClassVar[Messages] = Messages()
     messages.register_messages(dict(
-        open_derived=OpenDerivedMessage,
         delete_derived=DeleteDerivedMessage,
         refresh=RefreshMessage,
     ))
@@ -106,13 +105,15 @@ class DeriveWidget(ImageViewerWidget):
             logger.warning(f"Unknown derived image {path}")
         return image
     
-    @messages.register_handler
-    def _do_open_derived(self, msg: OpenDerivedMessage) -> None:
+    @command
+    def open_derived(self, msg: OpenDerivedRequest) -> None:
         logger.debug(f"Open derived {msg}")
         
         image = self._find_child(msg.path)
-        if image is not None:
-            self._derived.open_in_editor(image)
+        if image is None:
+            raise ValueError(f"Unknown derived image {msg.path}")
+        
+        self._derived.open_in_editor(image)
     
     @messages.register_handler
     def _do_delete_derived(self, msg: DeleteDerivedMessage) -> None:

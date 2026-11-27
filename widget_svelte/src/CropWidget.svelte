@@ -123,6 +123,7 @@
 
 <Viewer
   {model}
+  {experimental}
   {loader}
   {shortcuts}
   areaClass="h-[36rem]"

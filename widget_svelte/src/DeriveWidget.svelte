@@ -5,7 +5,8 @@
   import IconRefresh from "@lucide/svelte/icons/refresh-cw";
   import { onDestroy, untrack } from "svelte";
   import type { WidgetProps } from "./anywidget.svelte";
-  import { useTrait, sendMessage } from "./anywidget.svelte";
+  import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
+  import { Notifier } from "./notifier.svelte";
   import { ImageLoader } from "./imageLoader";
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
@@ -34,12 +35,22 @@
 
   const children = useTrait(model, "children");
 
+  const notifier = new Notifier();
+
   function editCopy() {
-    sendMessage(model, "edit_copy");
+    notifier.track(
+      invoke(experimental, "edit_copy", {}),
+      "Creating an edited copy...",
+      "Opened the copy in the image editor",
+    );
   }
 
   function openDerived(child: DerivedImageInfo) {
-    sendMessage(model, "open_derived", { path: child.path });
+    notifier.track(
+      invoke(experimental, "open_derived", { path: child.path }),
+      "Opening in the image editor...",
+      "Opened in the image editor",
+    );
   }
 
   const confirmDelete = new TwoStepConfirm<string>();
@@ -67,7 +78,9 @@
 
 <Viewer
   {model}
+  {experimental}
   {loader}
+  {notifier}
   {shortcuts}
   help={[
     { keys: [["E"]], text: "create an edited copy" },

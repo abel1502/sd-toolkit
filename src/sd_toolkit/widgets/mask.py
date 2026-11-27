@@ -23,7 +23,7 @@ class DeleteMaskMessage:
 
 
 @define
-class EditExternallyMessage:
+class EditExternallyRequest:
     pass
 
 
@@ -93,7 +93,6 @@ class MaskWidget(ImageViewerWidget):
     messages: typing.ClassVar[Messages] = Messages()
     messages.register_messages(dict(
         delete_mask=DeleteMaskMessage,
-        edit_externally=EditExternallyMessage,
         import_external=ImportExternalMessage,
     ))
     
@@ -111,13 +110,13 @@ class MaskWidget(ImageViewerWidget):
             self._on_show(image)
             self._update_mark(image)
     
-    @messages.register_handler
-    def _do_edit_externally(self, msg: EditExternallyMessage) -> None:
+    @command
+    def edit_externally(self, msg: EditExternallyRequest) -> None:
         logger.debug(f"Edit externally {msg}")
         
         image = self.current_image
         if image is None:
-            return
+            raise ValueError("No image is shown")
         
         self._external.add(image.path)
         self._derived.edit_mask_externally(image)

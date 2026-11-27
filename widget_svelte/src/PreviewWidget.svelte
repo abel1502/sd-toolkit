@@ -26,7 +26,7 @@
   let showText = $state(false);
 </script>
 
-<Viewer {model} {loader} showInfo={true}>
+<Viewer {model} {experimental} {loader} showInfo={true}>
   {#snippet side()}
     <div class="flex flex-row items-center justify-between">
       <span class="text-sm font-semibold text-slate-600">Tags ({tags.value.length})</span>

@@ -14,6 +14,7 @@ import { onDestroy, untrack } from "svelte";
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
   import { throttled } from "./confirm.svelte";
+  import { Notifier } from "./notifier.svelte";
   import Viewer from "./Viewer.svelte";
   import Button from "./Button.svelte";
 import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
@@ -116,8 +117,14 @@ import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
     if (dirty) {
       await save();
     }
-    sendMessage(model, "edit_externally");
+    notifier.track(
+      invoke(experimental, "edit_externally", {}),
+      "Opening the mask in the image editor...",
+      "Opened in the image editor. Changes are imported when you come back here",
+    );
   }
+
+  const notifier = new Notifier();
 
   // The mask might have been edited externally, so check for changes when the user comes back
   const onfocus = throttled(() => sendMessage(model, "import_external"));
@@ -143,7 +150,9 @@ import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
 
 <Viewer
   {model}
+  {experimental}
   {loader}
+  {notifier}
   {shortcuts}
   {beforeNavigate}
   areaClass="h-[36rem]"

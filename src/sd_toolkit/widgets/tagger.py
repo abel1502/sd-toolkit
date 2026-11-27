@@ -241,11 +241,11 @@ class RevertImageMessage:
     pass
 
 
-# TODO: Metadata on tags is handled inconsistently! Fix!
-# - The interactive pass discards the metadata on every tag the user touches, because it takes the tag string from the front-end message.
-# - The non-interactive pass applies the metadata as it is in the tag group definitions.
-# This is good for some metadata, like tag confidence, but bad for stuff like tag danbooru category.
-# I suppose we should replace the metadata with the one from the group definitions in every case. Categories will be lost, but the right way to eventually fix it is to iinfer (or manually add) the categories for the group definition tags
+# Note: Once a choice is made for an image, its tags from the groups always carry the metadata from the
+# group definitions (like when the saved choices are re-applied), rather than whatever the image had.
+# This is good for some metadata, like tag confidence, but loses stuff like the danbooru category,
+# unless it's specified in the group definitions.
+# TODO: Infer the categories for the group definition tags?
 class TaggerWidget(ImageViewerWidget):
     _component: str = traitlets.Unicode("tagger").tag(sync=True)
     
@@ -497,6 +497,8 @@ class TaggerWidget(ImageViewerWidget):
     
     def _record_choices(self, image: TaggedImage) -> None:
         tags_changed = self._choices.record(image)
+        # Makes the tags (and their metadata) exactly the same as re-applying the saved choices would
+        self._choices.apply(image)
         if tags_changed and self._saved_choices_path is not None:
             self._choices.save(self._saved_choices_path)
         self._update_mark(image)

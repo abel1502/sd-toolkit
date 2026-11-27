@@ -62,6 +62,7 @@
 
 <Viewer
   {model}
+  {experimental}
   {loader}
   {shortcuts}
   help={[

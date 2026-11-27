@@ -82,12 +82,12 @@ class SwitchImageMessage:
 
 
 @define
-class ViewImageMessage:
+class ViewImageRequest:
     pass
 
 
 @define
-class EditCopyMessage:
+class EditCopyRequest:
     pass
 
 
@@ -418,8 +418,6 @@ class ImageViewerWidget(BaseWidget):
     messages: typing.ClassVar[Messages] = Messages()
     messages.register_messages(dict(
         switch_image=SwitchImageMessage,
-        view_image=ViewImageMessage,
-        edit_copy=EditCopyMessage,
     ))
     
     @messages.register_handler
@@ -428,23 +426,25 @@ class ImageViewerWidget(BaseWidget):
         
         self.go_to(msg.idx)
     
-    @messages.register_handler
-    def _do_view_image(self, msg: ViewImageMessage) -> None:
+    @command
+    def view_image(self, msg: ViewImageRequest) -> None:
         logger.debug(f"View image {msg}")
         
         image = self.current_image
         if image is None:
-            return
+            raise ValueError("No image is shown")
         
         image.open_viewer()
     
-    @messages.register_handler
-    def _do_edit_copy(self, msg: EditCopyMessage) -> None:
+    @command
+    def edit_copy(self, msg: EditCopyRequest) -> None:
         logger.debug(f"Edit copy {msg}")
         
         image = self.current_image
-        if image is None or self._derived is None:
-            return
+        if image is None:
+            raise ValueError("No image is shown")
+        if self._derived is None:
+            raise ValueError("No `derived` store was given to the widget")
         
         self._derived.copy_for_edit(image)
         self.refresh()

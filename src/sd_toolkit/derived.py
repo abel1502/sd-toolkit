@@ -298,12 +298,7 @@ class DerivedImages:
     
     @staticmethod
     def open_in_editor(image: TaggedImage) -> None:
-        open_file(
-            image.path,
-            command=Config.get().image_editor_command,
-            edit=True,
-            focus=Config.get().editor_autofocus,
-        )
+        open_file(image.path, command=Config.get().image_editor_command, edit=True)
     
     def crop(
         self,
@@ -432,12 +427,7 @@ class DerivedImages:
             ])
             os.utime(document, ns=(mask_mtime, mask_mtime))
         
-        open_file(
-            document,
-            command=Config.get().image_editor_command,
-            edit=True,
-            focus=Config.get().editor_autofocus,
-        )
+        open_file(document, command=Config.get().image_editor_command, edit=True)
         
         return document
     

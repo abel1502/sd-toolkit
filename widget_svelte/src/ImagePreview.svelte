@@ -1,8 +1,12 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import IconLoader from "@lucide/svelte/icons/loader-circle";
+  import IconCheck from "@lucide/svelte/icons/check";
+  import IconAlert from "@lucide/svelte/icons/circle-alert";
+  import { fade } from "svelte/transition";
 
   import type { ImageButton, MarkStyle } from "./types";
+  import type { Notice } from "./notifier.svelte";
 
   interface Props {
     url: string | null;
@@ -10,6 +14,8 @@
     error?: string | null;
     badge?: MarkStyle | null;
     buttons?: ImageButton[];
+    /** A status message shown over the image (e.g. after clicking a button). */
+    notice?: Notice | null;
     /** Replaces the plain `<img>`. */
     content?: Snippet;
     class?: string;
@@ -21,6 +27,7 @@
     error = null,
     badge = null,
     buttons = [],
+    notice = null,
     content,
     class: extraClass = "",
   }: Props = $props();
@@ -52,6 +59,25 @@
       style:background-color={badge.color}
     >
       {badge.label}
+    </div>
+  {/if}
+
+  {#if notice}
+    <div
+      class={[
+        "absolute bottom-10 left-0 m-2 max-w-[calc(100%-1rem)] flex flex-row items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs shadow-sm ring-1 whitespace-pre-wrap break-words",
+        notice.kind == "error" ? "bg-red-50 text-red-700 ring-red-200" : "bg-white/90 text-slate-700 ring-slate-200",
+      ]}
+      transition:fade={{ duration: 150 }}
+    >
+      {#if notice.kind == "pending"}
+        <IconLoader class="w-3.5 h-3.5 shrink-0 animate-spin" />
+      {:else if notice.kind == "success"}
+        <IconCheck class="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+      {:else}
+        <IconAlert class="w-3.5 h-3.5 shrink-0" />
+      {/if}
+      {notice.text}
     </div>
   {/if}
 
