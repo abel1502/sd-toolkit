@@ -12,9 +12,10 @@
 - Add character-to-series inference, either to the autotagger or as a Tags method?
 - Add danbooru tag database knowledge (currently only pixiv aliases, perhaps also category inference and more)
 - Add LLM-powered autotagging for OCR
-- Derived images (`DerivedImages`):
+- Derived images (`MutableRoot`):
   - Add video and ugoira (zip) frame extraction. Programmatic and with widget.
   - Settle the semantics (immutability/locking, tag inheritance, interaction with `Dataset.filter`, garbage collection, mask export layout for AI-toolkit)
+  - A `TaggedImage` method for deliberately inheriting the tags of its parents (new images start untagged)?
 - Automatic tag refinement: pick the subset of a source's tags that applies to a particular image (e.g. a crop of a tagged image, or one image of a multi-image pixiv post, where the post's tags apply to all of them), possibly adding common extras like `cropped, out_of_frame`
 - `TagEditorWidget` UX:
   - Undo and redo

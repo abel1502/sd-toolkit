@@ -1,6 +1,4 @@
 <script lang="ts">
-  import IconSave from "@lucide/svelte/icons/save";
-  import IconSaveOff from "@lucide/svelte/icons/save-off";
   import IconRotateCCW from "@lucide/svelte/icons/rotate-ccw";
   import { onDestroy, untrack } from "svelte";
   import type { WidgetProps } from "./anywidget.svelte";
@@ -66,9 +64,6 @@
     ) : []),
     { code: "Backspace", callback: revertImage },
   ]);
-
-  // TODO: Wire up
-  let autoSaveUnchanged: boolean = $state(true);
 </script>
 
 <Viewer
@@ -83,11 +78,6 @@
     { keys: [["Backspace"]], text: "reset current image" },
   ]}
   imageButtons={[
-    {
-      icon: autoSaveUnchanged ? IconSave : IconSaveOff,
-      title: (autoSaveUnchanged ? "Disable" : "Enable") + " saving unchanged images",
-      onclick: () => { autoSaveUnchanged = !autoSaveUnchanged },
-    },
     {
       icon: IconRotateCCW,
       title: "Reset image tags",

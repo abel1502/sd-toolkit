@@ -270,10 +270,11 @@ class TagReviewWidget(ImageViewerWidget):
         *,
         saved_choices: pathlib.Path | str | None = None,
         skip_reviewed: bool = True,
+        save_unchanged: bool = True,
         auto_hotkeys: typing.Literal["top_level", "all", "none"] = "none",
         auto_promote: bool = False,
         info: InfoFunc | None = None,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = True,
         out: ipywidgets.Output | None = None,
@@ -289,6 +290,8 @@ class TagReviewWidget(ImageViewerWidget):
             repeating any of your manual inputs.
         :param skip_reviewed: By default, the widget will start at the first image that doesn't have annotations
             in `saved_choices`. If this is `False`, it will start at the very first image regardless.
+        :param save_unchanged: Whether leaving an image records its choices even if they weren't changed (i.e.
+            marks it as reviewed). Can be toggled in the widget.
         :param auto_hotkeys: Allow to assign digit (1-9) hotkeys to groups automatically. `"top_level"` will 
             only assign hotkeys to top-level groups, `"all"` will assign hotkeys to all groups, and `"none"`
             will not assign any hotkeys. Numbers are assigned in order. Groups beyond the first 9 and groups
@@ -342,6 +345,7 @@ class TagReviewWidget(ImageViewerWidget):
             tag_groups=self._convert_groups(groups, auto_hotkeys),
             has_done_screen=True,
             mark_styles=[None, MarkStyle("Reviewed", "#16a34a")],
+            save_unchanged=save_unchanged,
         )
     
     @staticmethod
@@ -455,6 +459,8 @@ class TagReviewWidget(ImageViewerWidget):
         assert original_tags is not None
         
         self._choices.reset(image, original_tags)
+        if self._saved_choices_path is not None:
+            self._choices.save(self._saved_choices_path)
         with self.hold_sync():
             self._refresh_tags()
             self._update_mark(image)
@@ -478,8 +484,9 @@ class TagReviewWidget(ImageViewerWidget):
     
     @typing.override
     def _on_leave(self, image: TaggedImage) -> None:
-        # TODO: Should apply when advancing to next image after looking, but not when skimming through quickly...
-        self._record_choices(image)
+        # Note: changes are recorded immediately, so only the unchanged images are left to record here
+        if self.save_unchanged:
+            self._record_choices(image)
     
     @typing.override
     def _mark(self, image: TaggedImage) -> int:

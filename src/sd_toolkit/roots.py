@@ -65,7 +65,7 @@ class Root:
     name: str | None = field(default=None, kw_only=True)
     """
     If specified, the loaded images get it as their `img_origin` metadata. Also used to choose
-    the root to store new images in (see `NewImagesRoot`).
+    the root to store new images in (see `MutableRoot`).
     """
     
     KIND: typing.ClassVar[str]
@@ -84,7 +84,7 @@ class Root:
     @property
     def is_mutable(self) -> bool:
         """
-        Whether new images can be added to this root (see `NewImagesRoot`).
+        Whether new images can be added to this root (see `MutableRoot`).
         """
         
         return False
@@ -204,21 +204,21 @@ class GalleryDLRoot(Root):
 
 
 @define()
-class NewImagesRoot(Root):
+class MutableRoot(Root):
     """
     A mutable root, holding images made from other images of the dataset (edited copies, crops, ...).
     The new images are linked to the images they were made from via the `img_derived_from` metadata field.
     
     The directory has an index file that lists the new images, which is updated immediately whenever
     images are added or removed. So, new images persist regardless of dataset checkpoints. Note that the
-    index only remembers the images' paths and metadata: when a new image is loaded into a dataset,
-    it gets a copy of its parent's tags (see `Dataset`).
+    index only remembers the images' paths, metadata and their tags at the time they were added (usually
+    none). The tags they get later are part of the dataset (and its checkpoints), like for any other image.
     
     Usually you don't need to call the methods of this class directly, use the ones of `Dataset`
     (e.g. `Dataset.copy_for_edit` or `Dataset.crop`) instead.
     """
     
-    KIND: typing.ClassVar[str] = "new_images"
+    KIND: typing.ClassVar[str] = "mutable"
     
     # Note: the index is re-read on every access instead of being cached, so that copies of the root
     # (e.g. in deep-cloned datasets) can't get out of sync.
@@ -236,8 +236,7 @@ class NewImagesRoot(Root):
     
     def entries(self) -> list[TaggedImage]:
         """
-        All the images in the index, including the ones whose files are missing. Their tags are only
-        meaningful for images whose ancestors aren't in the dataset.
+        All the images in the index, including the ones whose files are missing.
         """
         
         if not self.index_path.is_file():
@@ -280,7 +279,7 @@ class NewImagesRoot(Root):
         :returns: The images made directly from `parent`.
         """
         
-        return [self._mark_origin(image) for image in self.entries() if image.parent_path == parent]
+        return [self._mark_origin(image) for image in self.entries() if image.parent() == parent]
     
     def new_path(self, parent: TaggedImage, label: str, *, suffix: str | None = None, key: str | None = None) -> pathlib.Path:
         """
@@ -322,7 +321,7 @@ class NewImagesRoot(Root):
         entries.append(attrs.evolve(image, tags=image.tags.clone()))
         self._write_entries(entries)
         
-        logger.debug(f"Added new image {image.path} (made from {image.parent_path})")
+        logger.debug(f"Added new image {image.path} (made from {image.parent()})")
         
         return self._mark_origin(image)
     
@@ -357,10 +356,7 @@ def _unstructure_Root(root: Root) -> dict[str, typing.Any]:
 
 
 def _structure_Root(data: typing.Any, cls: type[Root]) -> Root:
-    # Old checkpoints store the roots as plain paths
-    if isinstance(data, str):
-        return RawRoot(data)
-    
+    # Note: the roots of old checkpoints (plain paths) are converted by the checkpoint migrations (see `Dataset`)
     data = dict(data)
     root_cls = Root.REGISTRY.get(data.pop("kind", None))
     if root_cls is None:
@@ -386,5 +382,5 @@ __all__ = [
     "Root",
     "RawRoot",
     "GalleryDLRoot",
-    "NewImagesRoot",
+    "MutableRoot",
 ]

@@ -252,7 +252,7 @@ class TagEditorWidget(ImageViewerWidget):
         make_tag: typing.Callable[[Tag], Tag] | None = None,
         vocabulary: TagsLike | None = None,
         info: InfoFunc | None = None,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = True,
         start_idx: int = 0,

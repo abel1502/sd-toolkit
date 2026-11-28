@@ -7,6 +7,7 @@ from attrs import define
 from loguru import logger
 
 from sd_toolkit.dataset import Dataset, TaggedImage
+from sd_toolkit.image import img_crop_box
 from sd_toolkit.widgets.base import Messages, command, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle, image_key
 
@@ -37,8 +38,8 @@ class RefreshMessage:
 class DeriveWidget(ImageViewerWidget):
     """
     A widget for creating edited copies of images. The copies are opened in the configured
-    image editor (see `Config.image_editor_command`), and stored in a root for new images
-    (see `NewImagesRoot`).
+    image editor (see `Config.image_editor_command`), and stored in a mutable root
+    (see `MutableRoot`).
     
     The widget also lists the new images already made from the current one, allowing to reopen
     or delete them. It refreshes the previews automatically when the browser window regains focus
@@ -64,7 +65,7 @@ class DeriveWidget(ImageViewerWidget):
         out: ipywidgets.Output | None = None,
     ):
         """
-        :param dataset: The images to make new images from. Must have a root for new images (see `NewImagesRoot`).
+        :param dataset: The images to make new images from. Must have a mutable root (see `MutableRoot`).
         :param new_images_origin: The root to store the new images in. See `ImageViewerWidget`.
         :param show_new_images: Whether to show the new images made from each image right after it.
         :param info: Computes additional properties to display for each image.
@@ -130,7 +131,7 @@ class DeriveWidget(ImageViewerWidget):
             DerivedImageInfo(
                 path=str(child.path),
                 name=child.path.name,
-                kind="crop" if child.crop_box is not None else "edit",
+                kind="crop" if img_crop_box.of(child) is not None else "edit",
                 key=image_key(child.path),
             )
             for child in children

@@ -17,9 +17,9 @@ from PIL import Image
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
 from sd_toolkit.storage import CBOR_CONVERTER, save, load
-from sd_toolkit.metadata import Metadata, MetadataUpdate
-from sd_toolkit.image import TaggedImage, img_origin, img_derived_from, img_crop_box
-from sd_toolkit.roots import Root, NewImagesRoot, img_gallery_dl_post
+from sd_toolkit.metadata import MetadataUpdate
+from sd_toolkit.image import TaggedImage, img_derived_from, img_crop_box
+from sd_toolkit.roots import Root, RawRoot, GalleryDLRoot, MutableRoot, img_gallery_dl_post
 from sd_toolkit.masks import Mask, MaskStore
 if typing.TYPE_CHECKING:
     from sd_toolkit.widgets.viewer import InfoFunc
@@ -33,9 +33,10 @@ class Dataset(typing.Sequence[TaggedImage]):
     A list of tagged images, loaded from one or more roots (see `Root`), plus the masks attached to them
     (see `Mask`).
     
-    Some roots (see `NewImagesRoot`) can hold new images, made from the other images of the dataset
-    (e.g. edited copies or crops). When a new image enters the dataset, it gets a copy of the tags of the
-    image it was made from (and its metadata), and is placed right after it (and its other new images).
+    Some roots (see `MutableRoot`) can hold new images, made from the other images of the dataset
+    (e.g. edited copies or crops). When a new image enters the dataset, it's placed right after the image
+    it was made from (and its other new images). It doesn't inherit anything from it (neither the tags nor
+    the metadata): new images start untagged.
     """
     
     roots: list[Root]
@@ -50,6 +51,12 @@ class Dataset(typing.Sequence[TaggedImage]):
     """
     For views (see `view`): the dataset this one is a view of. New images and masks added to a view are
     added to its base as well.
+    """
+    
+    CHECKPOINT_VERSION: typing.ClassVar[int] = 1
+    """
+    The version of the checkpoint format. Checkpoints without a version are version 0.
+    Older checkpoints are converted when loaded (see `_CHECKPOINT_MIGRATIONS`).
     """
     
     def __init__(
@@ -129,7 +136,7 @@ class Dataset(typing.Sequence[TaggedImage]):
     
     # New images
     
-    def new_images_root(self, origin: str | None = None) -> NewImagesRoot:
+    def mutable_root(self, origin: str | None = None) -> MutableRoot:
         """
         :param origin: The name of the root. If `None`, the first mutable root is used.
         :returns: The root to store new images in.
@@ -137,29 +144,32 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         for root in self.roots:
             if root.is_mutable and (origin is None or root.name == origin):
-                assert isinstance(root, NewImagesRoot)
+                assert isinstance(root, MutableRoot)
                 return root
         
         if origin is None:
-            raise ValueError(f"{self!r} has no root for new images (see `NewImagesRoot`)")
-        raise ValueError(f"{self!r} has no root for new images named {origin!r}")
+            raise ValueError(f"{self!r} has no mutable root (see `MutableRoot`)")
+        raise ValueError(f"{self!r} has no mutable root named {origin!r}")
     
-    def has_new_images_root(self, origin: str | None = None) -> bool:
+    def has_mutable_root(self, origin: str | None = None) -> bool:
         return any(root.is_mutable and (origin is None or root.name == origin) for root in self.roots)
     
-    def _root_of(self, image: TaggedImage) -> NewImagesRoot:
+    def _root_of(self, image: TaggedImage) -> MutableRoot:
         for root in self.roots:
-            if isinstance(root, NewImagesRoot) and image.path.is_relative_to(root.path):
+            if isinstance(root, MutableRoot) and image.path.is_relative_to(root.path):
                 return root
-        raise ValueError(f"{image.path} is not in any root for new images")
+        raise ValueError(f"{image.path} is not in any mutable root")
     
     def _find(self, path: pathlib.Path) -> TaggedImage | None:
-        return next((image for image in self.contents if image.path == path), None)
+        found = [image for image in self.contents if image.path == path]
+        if len(found) > 1:
+            raise ValueError(f"{path} is in {self!r} {len(found)} times")
+        return found[0] if found else None
     
     def _insert_new(self, image: TaggedImage) -> TaggedImage:
         """
-        Places a new image after its closest ancestor in the dataset (and the ancestor's other new images),
-        inheriting its tags and metadata. Images without ancestors in the dataset keep their tags, and go to the end.
+        Places a new image after its closest ancestor in the dataset (and the ancestor's other new images).
+        Images without ancestors in the dataset go to the end.
         If an image with the same path is in the dataset already, that one is returned instead.
         """
         
@@ -174,8 +184,6 @@ class Dataset(typing.Sequence[TaggedImage]):
             if idx is None:
                 continue
             
-            self._inherit(image, self.contents[idx])
-            
             idx += 1
             while idx < len(self.contents) and ancestor in self.contents[idx].derived_from:
                 idx += 1
@@ -185,16 +193,6 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         self.contents.append(image)
         return image
-    
-    @staticmethod
-    def _inherit(image: TaggedImage, ancestor: TaggedImage) -> None:
-        # The index of a root only stores the new images' own metadata (the chain of origin, ...)
-        own = image.metadata
-        image.tags = ancestor.tags.clone()
-        image.metadata = Metadata(ancestor.metadata.contents | own.contents)
-        for own_field in (img_origin, img_crop_box):
-            if not own.has_is_set(own_field):
-                image.apply_metadata(own_field.unset())
     
     def _attach(self, image: TaggedImage) -> TaggedImage:
         base = self._base() if self._base is not None else None
@@ -218,17 +216,17 @@ class Dataset(typing.Sequence[TaggedImage]):
         parents: typing.Iterable[TaggedImage] | None = None,
     ) -> list[TaggedImage]:
         """
-        Adds the images of a root for new images whose ancestors are in the dataset, but which aren't in the dataset
+        Adds the images of a mutable root whose ancestors are in the dataset, but which aren't in the dataset
         themselves. This is useful after loading a checkpoint that was saved before the new images were made.
         Widgets that can make new images do this automatically.
         
-        :param origin: The root's name. See `new_images_root`.
+        :param origin: The root's name. See `mutable_root`.
         :param parents: If specified, only the images made (directly or indirectly) from these are added.
         :returns: All the images of the root made from `parents` (or from any image of the dataset), whether they
             were already in the dataset or not.
         """
         
-        root = self.new_images_root(origin)
+        root = self.mutable_root(origin)
         ancestors = {image.path for image in (self.contents if parents is None else parents)}
         
         result: list[TaggedImage] = []
@@ -254,18 +252,19 @@ class Dataset(typing.Sequence[TaggedImage]):
         metadata: typing.Iterable[MetadataUpdate] = (),
     ) -> TaggedImage:
         """
-        Creates a new image made from `parent`, stores it in a root for new images, and adds it to the dataset.
+        Creates a new image made from `parent`, stores it in a mutable root, and adds it to the dataset.
+        The new image is untagged.
         
         :param write: Called with the new image's path, must write the file.
         :param label: Used in the new file's name.
         :param suffix: The new file's extension. Defaults to the parent's one.
         :param key: If specified, the image's path is determined by it (and the parent's path), and if such an
             image exists already, it's reused (without calling `write`). Meant for reproducible images, like crops.
-        :param origin: The name of the root to store the image in. See `new_images_root`.
-        :param metadata: The new image's own metadata (besides `img_derived_from`). The rest is inherited from the parent.
+        :param origin: The name of the root to store the image in. See `mutable_root`.
+        :param metadata: The new image's metadata (besides `img_derived_from`).
         """
         
-        root = self.new_images_root(origin)
+        root = self.mutable_root(origin)
         path = root.new_path(parent, label, suffix=suffix, key=key)
         
         if key is not None and (existing := root.get(path)) is not None:
@@ -280,7 +279,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         image = TaggedImage(
             path=path,
-            tags=parent.tags.clone(),
+            tags=Tags(),
         ).apply_metadata(
             img_derived_from.set((*parent.derived_from, parent.path)),
             *metadata,
@@ -300,7 +299,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         Creates a copy of `parent` and (by default) opens it in the image editor (see `Config.image_editor_command`).
         
         :param suffix: The format to save the copy in (e.g. `".png"`). Defaults to the parent's format.
-        :param origin: The name of the root to store the copy in. See `new_images_root`.
+        :param origin: The name of the root to store the copy in. See `mutable_root`.
         """
         
         # TODO: Save the edits as layered `.kra`/`.ora` documents (and read `mergedimage.png` from them)?
@@ -332,7 +331,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         :param box: The crop rectangle, as `(left, top, right, bottom)` in pixels.
             Must lie within the image. Recorded in the `img_crop_box` metadata field.
-        :param origin: The name of the root to store the crop in. See `new_images_root`.
+        :param origin: The name of the root to store the crop in. See `mutable_root`.
         """
         
         box = tuple(int(x) for x in box)
@@ -370,7 +369,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         """
         
         path = image.path if isinstance(image, TaggedImage) else image
-        return [other for other in self.contents if other.parent_path == path]
+        return [other for other in self.contents if other.parent() == path]
     
     # Masks
     
@@ -433,7 +432,8 @@ class Dataset(typing.Sequence[TaggedImage]):
     ) -> Dataset:
         mask_stores = {dataset.mask_store.root: dataset.mask_store for dataset in datasets if dataset.mask_store is not None}
         if len(mask_stores) > 1:
-            logger.warning(f"Merging datasets with different mask stores, using the first one: {list(mask_stores)!r}")
+            # TODO: Merge the mask directories (the masks are content-addressed, so it'd be just copying the files)?
+            raise ValueError(f"Cannot merge datasets with different mask stores: {list(mask_stores)!r}")
         
         return Dataset.from_contents(
             roots=[root for dataset in datasets for root in dataset.roots],
@@ -525,11 +525,15 @@ class Dataset(typing.Sequence[TaggedImage]):
                 shutil.make_archive(dest_zip, "zip", dest)
     
     def _rel_path(self, path: pathlib.Path) -> pathlib.Path:
-        for root in self.roots:
-            if path.is_relative_to(root.path):
-                return path.relative_to(root.path)
+        matches = [root.path for root in self.roots if path.is_relative_to(root.path)]
+        if not matches:
+            raise ValueError(f"Path {path} is not relative to any of {[root.path for root in self.roots]}")
         
-        raise ValueError(f"Path {path} is not relative to any of {[root.path for root in self.roots]}")
+        if len(matches) > 1:
+            # Roots aren't expected to overlap, at least for now
+            logger.warning(f"Path {path} is in multiple roots: {matches!r}, using the deepest one")
+        
+        return path.relative_to(max(matches, key=lambda root_path: len(root_path.parts)))
     
     def clone(self, deep: bool = True) -> Dataset:
         """
@@ -614,7 +618,9 @@ class Dataset(typing.Sequence[TaggedImage]):
         self._assign_from(saved)
     
     def _assign_from(self, other: Dataset) -> None:
-        # Note: the base (for views) is kept, since it's not part of the dataset's contents
+        if self._base is not None:
+            raise ValueError("Cannot replace the contents of a view (see `view`), `clone` it to make it independent first")
+        
         self.roots = other.roots
         self.contents = other.contents
         self.masks = other.masks
@@ -677,9 +683,9 @@ class Dataset(typing.Sequence[TaggedImage]):
         if not isinstance(other, Dataset):
             return NotImplemented
         
-        # Note: the mask store isn't compared, since it's just where the masks live
         return (
             self.roots == other.roots and
+            self.mask_store == other.mask_store and
             self.contents == other.contents and
             {path: image_masks for path, image_masks in self.masks.items() if image_masks} ==
             {path: image_masks for path, image_masks in other.masks.items() if image_masks}
@@ -834,6 +840,7 @@ class Dataset(typing.Sequence[TaggedImage]):
 @CBOR_CONVERTER.register_unstructure_hook
 def _unstructure_Dataset(dataset: Dataset) -> dict[str, typing.Any]:
     return dict(
+        version=Dataset.CHECKPOINT_VERSION,
         roots=CBOR_CONVERTER.unstructure(dataset.roots, list[Root]),
         contents=CBOR_CONVERTER.unstructure(dataset.contents, list[TaggedImage]),
         masks=CBOR_CONVERTER.unstructure(
@@ -844,14 +851,101 @@ def _unstructure_Dataset(dataset: Dataset) -> dict[str, typing.Any]:
     )
 
 
+def _migrate_checkpoint_v0(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    """
+    Version 0 covers two formats:
+    - the original one: the roots are plain paths, and there are no masks;
+    - the one from before the versioning: like version 1, except for the kind name of the mutable roots.
+    
+    Plain paths become `GalleryDLRoot`s if they contain a `gallery-dl` directory (with the parameters
+    inferred from the images, see `_infer_gallery_dl_root`), and `RawRoot`s otherwise.
+    """
+    
+    contents: list[dict[str, typing.Any]] = data["contents"]
+    
+    roots: list[typing.Any] = []
+    for root in data["roots"]:
+        if isinstance(root, str):
+            path = pathlib.Path(root)
+            migrated = _infer_gallery_dl_root(path, contents) if "gallery-dl" in path.parts else RawRoot(path)
+            logger.info(f"Migrating the checkpoint root {path} to {migrated!r}")
+            root = CBOR_CONVERTER.unstructure(migrated, Root)
+        elif root.get("kind") == "new_images":
+            root = root | {"kind": MutableRoot.KIND}
+        
+        roots.append(root)
+    
+    return dict(
+        roots=roots,
+        contents=contents,
+        masks=data.get("masks", {}),
+        mask_store=data.get("mask_store"),
+    )
+
+
+def _infer_gallery_dl_root(path: pathlib.Path, contents: list[dict[str, typing.Any]]) -> Root:
+    """
+    Infers the post type from the saved posts of the root's images (see `img_gallery_dl_post`), or, failing that,
+    from the origins of their tags (`BaseGalleryDLPost.extract_tags` sets them to the post type's name).
+    `save_full_metadata` is inferred from whether there are saved posts.
+    """
+    
+    from sd_toolkit.gallery_dl.base import BaseGalleryDLPost, _TYPE_KEY
+    from sd_toolkit.tags import tag_origin
+    
+    images = [image for image in contents if pathlib.Path(image["path"]).is_relative_to(path)]
+    
+    post_types = collections.Counter(
+        post[_TYPE_KEY]
+        for image in images
+        if (post := image.get("metadata", {}).get(img_gallery_dl_post.key)) is not None
+    )
+    save_full_metadata = bool(post_types)
+    
+    if not post_types:
+        post_types = collections.Counter(
+            origin
+            for image in images
+            for tag in image.get("tags", ())
+            if (origin := tag.get("metadata", {}).get(tag_origin.key)) in BaseGalleryDLPost.REGISTRY
+        )
+    
+    if not post_types:
+        logger.warning(f"Couldn't infer the post type of the gallery-dl root {path} (no saved posts or tag origins), migrating it as a `RawRoot`")
+        return RawRoot(path)
+    
+    if len(post_types) > 1:
+        logger.warning(f"The images of {path} have multiple post types: {dict(post_types)!r}, using the most common one")
+    
+    post_type, _ = post_types.most_common(1)[0]
+    return GalleryDLRoot(path, post_type, save_full_metadata=save_full_metadata)
+
+
+_CHECKPOINT_MIGRATIONS: typing.Final[dict[int, typing.Callable[[dict[str, typing.Any]], dict[str, typing.Any]]]] = {
+    0: _migrate_checkpoint_v0,
+}
+"""
+Version `n` -> a function converting the (unstructured) checkpoint data of version `n` to version `n + 1`.
+"""
+
+
 @CBOR_CONVERTER.register_structure_hook
 def _structure_Dataset(data: dict[str, typing.Any], cls: type[Dataset]) -> Dataset:
-    # Note: old checkpoints only have the roots (as plain paths) and the contents
+    data = dict(data)
+    version: int = data.pop("version", 0)
+    if version > Dataset.CHECKPOINT_VERSION:
+        raise ValueError(f"The checkpoint has version {version}, which is newer than the supported one ({Dataset.CHECKPOINT_VERSION})")
+    
+    while version < Dataset.CHECKPOINT_VERSION:
+        logger.info(f"Migrating a dataset checkpoint from version {version} to {version + 1}")
+        data = _CHECKPOINT_MIGRATIONS[version](data)
+        version += 1
+    
     return Dataset.from_contents(
         roots=CBOR_CONVERTER.structure(data["roots"], list[Root]),
         contents=CBOR_CONVERTER.structure(data["contents"], list[TaggedImage]),
-        masks=CBOR_CONVERTER.structure(data.get("masks", {}), dict[pathlib.Path, list[Mask]]),
-        mask_store=data.get("mask_store"),
+        masks=CBOR_CONVERTER.structure(data["masks"], dict[pathlib.Path, list[Mask]]),
+        mask_store=data["mask_store"],
     )
 
 

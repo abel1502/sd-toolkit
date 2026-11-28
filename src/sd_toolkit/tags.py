@@ -60,7 +60,7 @@ class Tag:
     @functools.cached_property
     def tag(self) -> str:
         return self.path[-1]
-
+    
     def __str__(self) -> str:
         return self.tag
     
@@ -356,6 +356,14 @@ class Tags:
         tags = Tags.cast(tags)
         return all(self.has(tag, match=match) for tag in tags)
     
+    def same_paths(self, other: TagsLike) -> bool:
+        """
+        Like `==`, but ignores the tags' metadata.
+        """
+        
+        other = Tags.cast(other)
+        return len(self) == len(other) and self.has_all(other)
+    
     def find_pred(self, func: typing.Callable[[Tag], bool]) -> list[Tag]:
         return [tag for tag in self if func(tag)]
     
@@ -372,7 +380,7 @@ class Tags:
         if result is None:
             raise ValueError(f"No matching tags in {self!r}")
         return result
-
+    
     def count_pred(self, func: typing.Callable[[Tag], bool]) -> int:
         return sum(func(tag) for tag in self)
     
@@ -394,7 +402,7 @@ class Tags:
         self._tags.extend(tags)
         
         return self
-
+    
     def add(self, tags: TagsLike, *, match: TagMatch = "path") -> typing.Self:
         tags = Tags.cast(tags)
         
@@ -425,7 +433,7 @@ class Tags:
                 self._tags.remove(existing_tag)
         
         return self
-
+    
     def clear(self) -> typing.Self:
         self._tags.clear()
         return self
@@ -505,7 +513,7 @@ class Tags:
         pred: typing.Callable[[Tag], bool] = lambda tag: True,
     ) -> typing.Self:
         return self.map(lambda tag: tag.moved((), parent_only=True) if pred(tag) else tag)
-
+    
     def apply_metadata(
         self,
         *updates: MetadataUpdate,
@@ -678,7 +686,7 @@ class Tags:
         "[": "\\[",
         "]": "\\]",
     })
-
+    
     @staticmethod
     def _make_origin_matcher(
         match_origin: str | re.Pattern | typing.Callable[[Tag], bool],

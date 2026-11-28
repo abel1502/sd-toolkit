@@ -107,7 +107,7 @@ class SelectionWidget(ImageViewerWidget):
         skip_reviewed: bool = True,
         auto_advance: bool = True,
         info: InfoFunc | None = None,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = True,
         out: ipywidgets.Output | None = None,

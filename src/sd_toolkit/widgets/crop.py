@@ -9,6 +9,7 @@ from loguru import logger
 from PIL import Image
 
 from sd_toolkit.dataset import Dataset, TaggedImage
+from sd_toolkit.image import img_crop_box
 from sd_toolkit.storage import load, save
 from sd_toolkit.widgets.base import Messages, command, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle, image_key
@@ -135,8 +136,8 @@ class DeleteCropMessage:
 
 class CropWidget(ImageViewerWidget):
     """
-    A widget for cropping images. The crops are new images (see `Dataset.crop`), stored in a root for new
-    images, with the crop rectangles in the `img_crop_box` metadata field.
+    A widget for cropping images. The crops are new images (see `Dataset.crop`), stored in a mutable root
+    (see `MutableRoot`), with the crop rectangles in the `img_crop_box` metadata field.
     
     Adjusting a crop replaces it with a new image (the files of new images are never modified in place).
     """
@@ -163,7 +164,7 @@ class CropWidget(ImageViewerWidget):
         *,
         saved_crops: pathlib.Path | str | None = None,
         crop_sizes: typing.Iterable[CropSizeLike] = DEFAULT_CROP_SIZES,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = False,
         info: InfoFunc | None = None,
@@ -171,7 +172,7 @@ class CropWidget(ImageViewerWidget):
         out: ipywidgets.Output | None = None,
     ):
         """
-        :param dataset: The images to crop. Must have a root for new images (see `NewImagesRoot`).
+        :param dataset: The images to crop. Must have a mutable root (see `MutableRoot`).
         :param saved_crops: The path to a file where the crop boxes will be saved to and restored from.
             The crops' files persist anyway, but this allows re-creating them (e.g. if you delete them).
         :param crop_sizes: The crop sizes to offer (see `CropSizeLike`). The first nine get digit
@@ -206,14 +207,14 @@ class CropWidget(ImageViewerWidget):
         The crops of the images the widget was created with (including crops of crops, and the ones made in earlier sessions).
         """
         
-        return [image for image in self.new_images if image.crop_box is not None]
+        return [image for image in self.new_images if img_crop_box.of(image) is not None]
     
     @typing.override
     def _makes_new_images(self) -> bool:
         return True
     
     def _crops_of(self, image: TaggedImage) -> list[TaggedImage]:
-        return [child for child in self._new_images_dataset().children_of(image) if child.crop_box is not None]
+        return [child for child in self._new_images_dataset().children_of(image) if img_crop_box.of(child) is not None]
     
     def _find_crop(self, image: TaggedImage, path: str) -> TaggedImage:
         crop = next((crop for crop in self._crops_of(image) if crop.path == pathlib.Path(path)), None)
@@ -225,7 +226,7 @@ class CropWidget(ImageViewerWidget):
         dataset = self._new_images_dataset()
         return bool(
             dataset.children_of(crop) or
-            dataset.new_images_root(self._new_images_origin).children_of(crop.path) or
+            dataset.mutable_root(self._new_images_origin).children_of(crop.path) or
             dataset.masks_of(crop)
         )
     
@@ -251,7 +252,7 @@ class CropWidget(ImageViewerWidget):
             raise ValueError(f"{crop.path} has new images or masks of its own, remove them first")
         
         self._new_images_dataset().remove_new_image(crop)
-        self._saved.remove(image, crop.crop_box)
+        self._saved.remove(image, img_crop_box.of(crop))
         self._save()
         self._after_change(image)
     
@@ -277,7 +278,7 @@ class CropWidget(ImageViewerWidget):
         
         if old is not None and old.path != crop.path:
             dataset.remove_new_image(old)
-            self._saved.remove(image, old.crop_box)
+            self._saved.remove(image, img_crop_box.of(old))
         
         self._save()
         self._after_change(image)
@@ -319,7 +320,7 @@ class CropWidget(ImageViewerWidget):
                 key=image_key(crop.path),
             )
             for crop in self._crops_of(image)
-            if (box := crop.crop_box) is not None
+            if (box := img_crop_box.of(crop)) is not None
         ]
     
     @typing.override

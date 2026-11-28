@@ -30,6 +30,14 @@ class TaggedImage:
         open_file(self.path, command=Config.get().image_viewer_command)
     
     def open_editor(self) -> None:
+        """
+        Opens the image in the image editor (see `Config.image_editor_command`).
+        
+        .. Warning::
+            This edits the image file itself. For an image of a dataset, it's usually the source file (e.g. a downloaded
+            post) that you'd rather keep intact: consider editing a copy instead (see `Dataset.copy_for_edit`).
+        """
+        
         open_file(self.path, command=Config.get().image_editor_command, edit=True)
     
     @property
@@ -40,22 +48,20 @@ class TaggedImage:
         
         return img_derived_from.of(self, ())
     
-    @property
-    def parent_path(self) -> pathlib.Path | None:
+    def parent(self, idx: int = 0) -> pathlib.Path | None:
         """
-        The image this one was made from, if any.
+        An image this one was made from (see `img_derived_from`), counting from the immediate parent.
+        
+        :param idx: `0` is the immediate parent, `1` is its parent, and so on. Negative indices count from the
+            other end, like for sequences: `-1` is the original image (the root of the chain).
+        :returns: The path of the image, or `None` if the chain has no such element (e.g. for images that weren't
+            made from other images).
         """
         
-        chain = self.derived_from
-        return chain[-1] if chain else None
-    
-    @property
-    def crop_box(self) -> tuple[int, int, int, int] | None:
-        """
-        See `img_crop_box`. `None` if the image isn't a crop of its parent.
-        """
-        
-        return img_crop_box.of(self, None)
+        chain = self.derived_from[::-1]
+        if not -len(chain) <= idx < len(chain):
+            return None
+        return chain[idx]
 
 
 img_origin = MetadataField[str](
@@ -71,18 +77,19 @@ img_derived_from = MetadataField[tuple[pathlib.Path, ...]](
     tuple[pathlib.Path, ...],
 )
 """
-For new images (see `NewImagesRoot`): the chain of images it was made from, starting with the original
+For new images (see `MutableRoot`): the chain of images it was made from, starting with the original
 and ending with the immediate parent. Having the whole chain allows to place the image correctly even if
 some of its ancestors are excluded from the dataset.
 """
 
-img_crop_box = MetadataField[tuple[int, int, int, int]](
+img_crop_box = MetadataField[tuple[int, int, int, int] | None](
     "crop_box",
-    tuple[int, int, int, int],
+    tuple[int, int, int, int] | None,
+    default=lambda: None,
 )
 """
 For crops: the `(left, top, right, bottom)` rectangle the image was cut out of its immediate parent with.
-Other new images are arbitrary edits of their parents.
+`None` for other images (new images that aren't crops are arbitrary edits of their parents).
 """
 
 

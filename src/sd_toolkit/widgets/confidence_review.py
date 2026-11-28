@@ -159,6 +159,10 @@ class ConfidenceReviewWidget(ImageViewerWidget):
     """
     The tags to review for each image, in their original form.
     """
+    _changed: set[pathlib.Path]
+    """
+    The images whose tags were toggled since their decisions were last recorded (or reset).
+    """
     
     def __init__(
         self,
@@ -168,8 +172,9 @@ class ConfidenceReviewWidget(ImageViewerWidget):
         match_origin: str | re.Pattern | typing.Callable[[Tag], bool] | None = None,
         show_reviewed: bool = False,
         skip_reviewed: bool = True,
+        save_unchanged: bool = True,
         info: InfoFunc | None = None,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = True,
         out: ipywidgets.Output | None = None,
@@ -183,6 +188,8 @@ class ConfidenceReviewWidget(ImageViewerWidget):
         :param show_reviewed: Whether to also list the tags that were reviewed earlier (in previous sessions),
             to allow changing the decisions.
         :param skip_reviewed: If `True`, the widget starts at the first image without saved decisions.
+        :param save_unchanged: Whether leaving an image records the decisions even if no tags were toggled (i.e. keeps
+            all the tags). If `False`, the untouched images stay unreviewed. Can be toggled in the widget.
         :param info: Computes additional properties to display for each image.
         :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
         :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
@@ -201,6 +208,7 @@ class ConfidenceReviewWidget(ImageViewerWidget):
         self._show_reviewed = show_reviewed
         self._originals = {}
         self._candidates = {}
+        self._changed = set()
         
         super().__init__(
             dataset,
@@ -212,6 +220,7 @@ class ConfidenceReviewWidget(ImageViewerWidget):
             out=out,
             has_done_screen=True,
             mark_styles=[None, MarkStyle("Reviewed", "#16a34a")],
+            save_unchanged=save_unchanged,
         )
     
     messages: typing.ClassVar[Messages] = Messages()
@@ -244,6 +253,7 @@ class ConfidenceReviewWidget(ImageViewerWidget):
             raise ValueError(f"{msg.path!r} is not a tag under review for {image.path}")
         
         self._set_present(image, tag, msg.present)
+        self._changed.add(image.path)
         self._refresh_tags()
     
     @messages.register_handler
@@ -256,6 +266,7 @@ class ConfidenceReviewWidget(ImageViewerWidget):
         
         for tag in self._candidates.get(image.path, ()):
             self._set_present(image, tag, msg.present)
+        self._changed.add(image.path)
         self._refresh_tags()
     
     @messages.register_handler
@@ -275,6 +286,7 @@ class ConfidenceReviewWidget(ImageViewerWidget):
         image.tags.remove(paths).add(Tags(tag for tag in original if paths.has(tag)))
         
         self._review.reset(image)
+        self._changed.discard(image.path)
         if self._saved_review_path is not None:
             self._review.save(self._saved_review_path)
         
@@ -310,7 +322,8 @@ class ConfidenceReviewWidget(ImageViewerWidget):
     
     @typing.override
     def _on_leave(self, image: TaggedImage) -> None:
-        self._record(image)
+        if self.save_unchanged or image.path in self._changed:
+            self._record(image)
     
     @typing.override
     def _mark(self, image: TaggedImage) -> int:
@@ -338,6 +351,7 @@ class ConfidenceReviewWidget(ImageViewerWidget):
     
     def _record(self, image: TaggedImage) -> None:
         changed = self._review.record(image, self._candidates.get(image.path, ()))
+        self._changed.discard(image.path)
         self._review.apply(image)
         if changed and self._saved_review_path is not None:
             self._review.save(self._saved_review_path)

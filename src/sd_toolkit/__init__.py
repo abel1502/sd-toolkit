@@ -12,7 +12,7 @@ else:
 from sd_toolkit.tags import TagLike, Tag, TagCategory, TagsLike, TagMatch, Tags, tag_category, tag_is_trigger, tag_origin, tag_confidence
 from sd_toolkit.tag_lookup import TagLookup, TableTagLookup, CompositeTagLookup
 from sd_toolkit.image import TaggedImage, img_origin, img_derived_from, img_crop_box
-from sd_toolkit.roots import Root, RawRoot, GalleryDLRoot, NewImagesRoot, img_gallery_dl_post
+from sd_toolkit.roots import Root, RawRoot, GalleryDLRoot, MutableRoot, img_gallery_dl_post
 from sd_toolkit.masks import Mask, MaskStore
 from sd_toolkit.dataset import Dataset
 from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate
@@ -66,7 +66,7 @@ __all__ = [
     "Root",
     "RawRoot",
     "GalleryDLRoot",
-    "NewImagesRoot",
+    "MutableRoot",
     "img_gallery_dl_post",
     "Mask",
     "MaskStore",

@@ -6,6 +6,8 @@
   import IconZoomIn from "@lucide/svelte/icons/zoom-in";
   import IconInfo from "@lucide/svelte/icons/info";
   import IconImagePlus from "@lucide/svelte/icons/image-plus";
+  import IconSave from "@lucide/svelte/icons/save";
+  import IconSaveOff from "@lucide/svelte/icons/save-off";
 
   import type { AnyModel, Experimental } from "./anywidget.svelte";
   import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
@@ -50,7 +52,7 @@
     help = [],
     beforeNavigate,
     showInfo = $bindable(false),
-    areaClass = "h-72",
+    areaClass = "h-144",
   }: Props = $props();
 
   // The model mustn't ever change, so we get rid of reactivity here.
@@ -65,6 +67,7 @@
   const markStyles = useTrait(_model, "mark_styles");
   const hasDoneScreen = useTrait(_model, "has_done_screen");
   const canEditCopy = useTrait(_model, "can_edit_copy");
+  const saveUnchanged = useTrait(_model, "save_unchanged");
 
   let maxIdx = $derived(hasDoneScreen.value ? imageCount.value : Math.max(0, imageCount.value - 1));
   let isDone = $derived(hasDoneScreen.value && imageIdx.value >= imageCount.value);
@@ -138,6 +141,13 @@
   const viewStatus = new ActionStatus(untrack(() => notifier));
 
   let allButtons: ImageButton[] = $derived([
+    ...(saveUnchanged.value !== null ? [{
+      icon: saveUnchanged.value ? IconSave : IconSaveOff,
+      title: saveUnchanged.value
+        ? "Unchanged images are marked as reviewed when leaving them (click to disable)"
+        : "Unchanged images are left unreviewed (click to mark them as reviewed when leaving them)",
+      onclick: () => { saveUnchanged.value = !saveUnchanged.value; },
+    }] : []),
     ...imageButtons,
     ...(canEditCopy.value ? [{
       icon: IconImagePlus,
@@ -191,7 +201,7 @@
   {:else}
     <div class={["flex flex-row gap-6 resize-y min-h-48 overflow-hidden", areaClass]} transition:slide>
       <ImagePreview
-        class="h-full max-h-[35vw] shrink-0"
+        class="h-full max-h-[70vw] shrink-0"
         url={imageUrl}
         {loading}
         {error}

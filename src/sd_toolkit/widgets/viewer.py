@@ -12,6 +12,7 @@ from PIL import Image
 
 from sd_toolkit.tags import Tag, Tags, tag_category, tag_origin, tag_confidence, tag_is_trigger
 from sd_toolkit.dataset import Dataset, TaggedImage
+from sd_toolkit.image import img_crop_box
 from sd_toolkit.widgets.base import Messages, Buffers, command, use_cattrs, BaseWidget
 
 
@@ -175,6 +176,14 @@ class ImageViewerWidget(BaseWidget):
     has_done_screen: bool = traitlets.Bool(False).tag(sync=True)
     can_edit_copy: bool = traitlets.Bool(False).tag(sync=True)
     
+    # Traitlets (Py <-> JS)
+    save_unchanged: bool | None = traitlets.Bool(None, allow_none=True).tag(sync=True)
+    """
+    For widgets that record the state of the images as reviewed when leaving them (e.g. `TagReviewWidget`):
+    whether to also do that for the images that weren't changed during the visit. Toggled in the frontend.
+    `None` for widgets without such behavior (then the frontend doesn't show the switch).
+    """
+    
     _source: typing.Sequence[TaggedImage]
     _dataset: typing.Sequence[TaggedImage]
     _known_paths: set[pathlib.Path]
@@ -189,7 +198,7 @@ class ImageViewerWidget(BaseWidget):
         dataset: typing.Sequence[TaggedImage],
         *,
         info: InfoFunc | None = None,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = True,
         start_idx: int = 0,
@@ -199,12 +208,13 @@ class ImageViewerWidget(BaseWidget):
     ):
         """
         :param dataset: The images to show. Making new images (edited copies, crops, ...) requires a `Dataset`
-            with a root for new images (see `NewImagesRoot`).
+            with a mutable root (see `MutableRoot`).
         :param info: Computes additional properties to display for each image. See `InfoFunc`.
         :param edit_copies: Whether to allow creating edited copies of the images (if the dataset supports it).
             This also adds the existing new images made from the shown images to the dataset (see
             `Dataset.attach_new_images`), e.g. after loading a checkpoint saved before they were made.
-        :param new_images_origin: The name of the root to store new images in (see `Dataset.new_images_root`).
+            Widgets whose purpose is making new images (e.g. `CropWidget`) always do the latter.
+        :param new_images_origin: The name of the root to store new images in (see `Dataset.mutable_root`).
         :param show_new_images: Whether to show the new images (they're placed right after the images they were made from).
         :param start_idx: The image to start at.
         :param skip_reviewed: If `True`, starts at the first image at or after `start_idx` that
@@ -219,12 +229,12 @@ class ImageViewerWidget(BaseWidget):
         self._can_make_new_images = (
             (edit_copies or self._makes_new_images()) and
             isinstance(dataset, Dataset) and
-            dataset.has_new_images_root(new_images_origin)
+            dataset.has_mutable_root(new_images_origin)
         )
         if self._makes_new_images() and not self._can_make_new_images:
             if not isinstance(dataset, Dataset):
                 raise TypeError(f"{type(self).__name__} requires a `Dataset`, got {type(dataset)!r}")
-            dataset.new_images_root(new_images_origin)  # Raises a descriptive error
+            dataset.mutable_root(new_images_origin)  # Raises a descriptive error
         self._show_new_images = show_new_images
         self._known_paths = set()
         self._initial_paths = {image.path for image in dataset}
@@ -384,9 +394,9 @@ class ImageViewerWidget(BaseWidget):
         except OSError as e:
             result.append(InfoItem("Error", str(e)))
         
-        if (parent := image.parent_path) is not None:
+        if (parent := image.parent()) is not None:
             result.append(InfoItem("Made from", str(parent)))
-            if (box := image.crop_box) is not None:
+            if (box := img_crop_box.of(image)) is not None:
                 result.append(InfoItem("Crop box", f"{box} ({box[2] - box[0]}×{box[3] - box[1]})"))
         
         if isinstance(self._info, typing.Mapping):
@@ -499,7 +509,7 @@ class ImageViewerWidget(BaseWidget):
         if image is None:
             raise ValueError("No image is shown")
         if not self._can_make_new_images:
-            raise ValueError("The widget's dataset has no root for new images")
+            raise ValueError("The widget's dataset has no mutable root")
         
         self._new_images_dataset().copy_for_edit(image, origin=self._new_images_origin)
         self.refresh()

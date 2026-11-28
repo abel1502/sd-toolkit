@@ -101,7 +101,7 @@ class MaskWidget(ImageViewerWidget):
         mask_tags: TagsLike | None = None,
         select: typing.Callable[[Mask], bool] | None = None,
         saved_masks: pathlib.Path | str | None = None,
-        edit_copies: bool = True,
+        edit_copies: bool = False,
         new_images_origin: str | None = None,
         show_new_images: bool = True,
         info: InfoFunc | None = None,
@@ -131,8 +131,7 @@ class MaskWidget(ImageViewerWidget):
         self._mask_store = dataset.mask_store
         self._mask_tags = Tags.cast(mask_tags, clone=True) if mask_tags is not None else Tags()
         if select is None:
-            paths = {tag.path for tag in self._mask_tags}
-            select = lambda mask: {tag.path for tag in mask.tags} == paths
+            select = lambda mask: mask.tags.same_paths(self._mask_tags)
         self._select = select
         self._saved_path = pathlib.Path(saved_masks) if saved_masks is not None else None
         self._saved = SavedMasks.load_or_create(self._saved_path) if self._saved_path is not None else SavedMasks()

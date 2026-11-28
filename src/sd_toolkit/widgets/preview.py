@@ -36,7 +36,7 @@ class PreviewWidget(ImageViewerWidget):
         """
         :param dataset: The images to show.
         :param info: Computes additional properties to display for each image.
-        :param edit_copies: Whether to allow creating edited copies of the images (off by default, since it modifies the dataset). See `ImageViewerWidget`.
+        :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
         :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
         :param show_new_images: Whether to show the new images made from the images. See `ImageViewerWidget`.
         :param start_idx: The image to start at.
