@@ -14,7 +14,6 @@ from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.storage import load, save
 from sd_toolkit.widgets.base import Messages, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle
-from sd_toolkit.derived import DerivedImages
 
 
 type TagGroupsLike = (
@@ -148,17 +147,17 @@ class TagGroup:
 
 
 @define()
-class SavedChoices:
+class SavedTagReview:
     _tags: Tags = field(converter=Tags.cast)
     # image path -> bitmap of tag choices (bit i = presence of tag #i)
     _image_choices: dict[pathlib.Path, int] = field(factory=dict)
     
     @classmethod
-    def load(cls, path: pathlib.Path | str) -> SavedChoices:
-        return load(SavedChoices, path)
+    def load(cls, path: pathlib.Path | str) -> SavedTagReview:
+        return load(SavedTagReview, path)
     
     @classmethod
-    def load_or_create(cls, path: pathlib.Path | str, tags: TagsLike) -> SavedChoices:
+    def load_or_create(cls, path: pathlib.Path | str, tags: TagsLike) -> SavedTagReview:
         tags = Tags.cast(tags)
         
         if not path.is_file():
@@ -241,13 +240,15 @@ class RevertImageMessage:
     pass
 
 
+# Note: The saved choices files (`SavedTagReview`) of the former `TaggerWidget` are fully compatible.
+#
 # Note: Once a choice is made for an image, its tags from the groups always carry the metadata from the
 # group definitions (like when the saved choices are re-applied), rather than whatever the image had.
 # This is good for some metadata, like tag confidence, but loses stuff like the danbooru category,
 # unless it's specified in the group definitions.
 # TODO: Infer the categories for the group definition tags?
-class TaggerWidget(ImageViewerWidget):
-    _component: str = traitlets.Unicode("tagger").tag(sync=True)
+class TagReviewWidget(ImageViewerWidget):
+    _component: str = traitlets.Unicode("tag_review").tag(sync=True)
     
     # Traitlets (Py -> JS)
     tag_groups: list[TagGroupInfo] = traitlets.List(default_value=[]).tag(
@@ -258,7 +259,7 @@ class TaggerWidget(ImageViewerWidget):
     
     # TODO: Make these public and the traitlets private? Seems like this is the stuff a user might, if rarely, want to access, while the traitlets are meant for JS-side consumption only.
     _originals: dict[pathlib.Path, Tags]
-    _choices: SavedChoices
+    _choices: SavedTagReview
     _saved_choices_path: pathlib.Path | None
     _promote_to: Tags | None
     
@@ -272,8 +273,9 @@ class TaggerWidget(ImageViewerWidget):
         auto_hotkeys: typing.Literal["top_level", "all", "none"] = "none",
         auto_promote: bool = False,
         info: InfoFunc | None = None,
-        derived: DerivedImages | None = None,
-        show_derived: bool = True,
+        edit_copies: bool = True,
+        new_images_origin: str | None = None,
+        show_new_images: bool = True,
         out: ipywidgets.Output | None = None,
     ):
         """
@@ -294,9 +296,9 @@ class TaggerWidget(ImageViewerWidget):
         :param auto_promote: If `True`, automatically converts flat tags to their scoped variants present
             in the `groups`. See `Tags.promote_hierarchy` for more details.
         :param info: Computes additional properties to display for each image.
-        :param derived: If specified, enables creating edited copies of images, and shows the
-            derived images after their parents.
-        :param show_derived: Whether to show the images derived from each image right after it.
+        :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
+        :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
+        :param show_new_images: Whether to show the new images made from the images. See `ImageViewerWidget`.
         :param out: If specified, the output of event handlers will be captured into it.
         """
         
@@ -315,10 +317,10 @@ class TaggerWidget(ImageViewerWidget):
             if isinstance(saved_choices, str):
                 saved_choices = pathlib.Path(saved_choices)
             
-            self._choices = SavedChoices.load_or_create(saved_choices, combined_tags)
+            self._choices = SavedTagReview.load_or_create(saved_choices, combined_tags)
             self._saved_choices_path = saved_choices
         else:
-            self._choices = SavedChoices(combined_tags)
+            self._choices = SavedTagReview(combined_tags)
             self._saved_choices_path = None
         
         # TODO: Soft-skip:
@@ -332,8 +334,9 @@ class TaggerWidget(ImageViewerWidget):
         super().__init__(
             dataset,
             info=info,
-            derived=derived,
-            show_derived=show_derived,
+            edit_copies=edit_copies,
+            new_images_origin=new_images_origin,
+            show_new_images=show_new_images,
             skip_reviewed=skip_reviewed,
             out=out,
             tag_groups=self._convert_groups(groups, auto_hotkeys),
@@ -505,7 +508,7 @@ class TaggerWidget(ImageViewerWidget):
 
 
 __all__ = [
-    "TaggerWidget",
+    "TagReviewWidget",
     "TagGroup",
     "TagGroupsLike",
 ]

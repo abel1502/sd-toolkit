@@ -9,7 +9,7 @@
 
   import type { AnyModel, Experimental } from "./anywidget.svelte";
   import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
-  import { Notifier } from "./notifier.svelte";
+  import { Notifier, ActionStatus } from "./notifier.svelte";
   import type { ImageLoader } from "./imageLoader";
   import type { Shortcut, ShortcutHelp } from "./hotkeys";
   import type { ImageButton, SwitchImageEvent, ViewerImage, ViewerTraits } from "./types";
@@ -22,7 +22,7 @@
     model: AnyModel<ViewerTraits>;
     experimental: Experimental;
     loader: ImageLoader;
-    /** Shows status messages over the image. Pass one to show messages from the widget too. */
+    /** Shows status messages (e.g. errors) over the image. Pass one to show messages from the widget too. */
     notifier?: Notifier;
     /** The panel to the right of the image. */
     side: Snippet;
@@ -134,16 +134,16 @@
     goToImage({ idx: imageIdx.value - 1 });
   }
 
+  const editCopyStatus = new ActionStatus(untrack(() => notifier));
+  const viewStatus = new ActionStatus(untrack(() => notifier));
+
   let allButtons: ImageButton[] = $derived([
     ...imageButtons,
     ...(canEditCopy.value ? [{
       icon: IconImagePlus,
-      title: "Create an edited copy",
-      onclick: () => notifier.track(
-        invoke(experimental, "edit_copy", {}),
-        "Creating an edited copy...",
-        "Opened the copy in the image editor",
-      ),
+      title: "Create an edited copy (and open it in the image editor)",
+      onclick: () => editCopyStatus.run(invoke(experimental, "edit_copy", {})),
+      status: editCopyStatus.state,
     }] : []),
     {
       icon: IconInfo,
@@ -153,11 +153,8 @@
     {
       icon: IconZoomIn,
       title: "Open in external viewer",
-      onclick: () => notifier.track(
-        invoke(experimental, "view_image", {}),
-        "Opening in the image viewer...",
-        "Opened in the image viewer",
-      ),
+      onclick: () => viewStatus.run(invoke(experimental, "view_image", {})),
+      status: viewStatus.state,
     },
   ]);
 

@@ -1,5 +1,6 @@
 import { defineWidget } from "./anywidget.svelte";
-import TaggerWidget from "./TaggerWidget.svelte";
+import TagReviewWidget from "./TagReviewWidget.svelte";
+import ConfidenceReviewWidget from "./ConfidenceReviewWidget.svelte";
 import PreviewWidget from "./PreviewWidget.svelte";
 import SelectionWidget from "./SelectionWidget.svelte";
 import TagEditorWidget from "./TagEditorWidget.svelte";
@@ -9,7 +10,8 @@ import CropWidget from "./CropWidget.svelte";
 import "./app.css";
 
 export default defineWidget({
-  tagger: TaggerWidget,
+  tag_review: TagReviewWidget,
+  confidence_review: ConfidenceReviewWidget,
   preview: PreviewWidget,
   selection: SelectionWidget,
   tag_editor: TagEditorWidget,

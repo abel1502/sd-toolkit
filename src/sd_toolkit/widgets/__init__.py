@@ -1,5 +1,6 @@
 from .viewer import ImageViewerWidget
-from .tagger import TaggerWidget, TagGroup, TagGroupsLike
+from .tag_review import TagReviewWidget, TagGroup, TagGroupsLike
+from .confidence_review import ConfidenceReviewWidget
 from .preview import PreviewWidget
 from .selection import Selection, SelectionWidget
 from .tag_editor import TagEdits, QuickAction, TagEditorWidget
@@ -9,7 +10,8 @@ from .crop import CropSize, CropWidget
 
 __all__ = [
     "ImageViewerWidget",
-    "TaggerWidget",
+    "TagReviewWidget",
+    "ConfidenceReviewWidget",
     "TagGroup",
     "TagGroupsLike",
     "PreviewWidget",

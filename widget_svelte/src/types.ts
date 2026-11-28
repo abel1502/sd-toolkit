@@ -1,4 +1,5 @@
 import type { Component } from "svelte";
+import type { ActionState } from "./notifier.svelte";
 
 export interface TagGroupInfo {
   tags: TagInfo[];
@@ -35,7 +36,9 @@ export interface MarkStyle {
 export interface ImageButton {
   icon: Component<any>;
   title: string;
-  onclick: () => void;
+  onclick: () => unknown;
+  /** The state of the button's action (see `ActionStatus`). */
+  status?: ActionState;
 };
 
 export interface ToggleTagEvent {

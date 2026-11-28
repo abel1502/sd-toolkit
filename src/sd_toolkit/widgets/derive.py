@@ -6,8 +6,7 @@ import traitlets
 from attrs import define
 from loguru import logger
 
-from sd_toolkit.dataset import TaggedImage
-from sd_toolkit.derived import DerivedImages
+from sd_toolkit.dataset import Dataset, TaggedImage
 from sd_toolkit.widgets.base import Messages, command, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle, image_key
 
@@ -38,9 +37,10 @@ class RefreshMessage:
 class DeriveWidget(ImageViewerWidget):
     """
     A widget for creating edited copies of images. The copies are opened in the configured
-    image editor (see `Config.image_editor_command`), and stored in a `DerivedImages` store.
+    image editor (see `Config.image_editor_command`), and stored in a root for new images
+    (see `NewImagesRoot`).
     
-    The widget also lists the images already derived from the current one, allowing to reopen
+    The widget also lists the new images already made from the current one, allowing to reopen
     or delete them. It refreshes the previews automatically when the browser window regains focus
     (e.g. after you switch back from the editor).
     """
@@ -53,45 +53,39 @@ class DeriveWidget(ImageViewerWidget):
         **use_cattrs(list[DerivedImageInfo]),
     )
     
-    _derived: DerivedImages
-    _include_auxiliary: bool
-    
     def __init__(
         self,
-        dataset: typing.Sequence[TaggedImage],
-        derived: DerivedImages,
+        dataset: Dataset,
         *,
-        show_derived: bool = False,
-        include_auxiliary: bool = False,
+        new_images_origin: str | None = None,
+        show_new_images: bool = False,
         info: InfoFunc | None = None,
         start_idx: int = 0,
         out: ipywidgets.Output | None = None,
     ):
         """
-        :param dataset: The images to derive new images from.
-        :param derived: Where to store the new images.
-        :param show_derived: Whether to show the images derived from each image right after it.
-        :param include_auxiliary: Whether to also list auxiliary derived images (e.g. masks).
+        :param dataset: The images to make new images from. Must have a root for new images (see `NewImagesRoot`).
+        :param new_images_origin: The root to store the new images in. See `ImageViewerWidget`.
+        :param show_new_images: Whether to show the new images made from each image right after it.
         :param info: Computes additional properties to display for each image.
         :param start_idx: The image to start at.
         :param out: If specified, the output of event handlers will be captured into it.
         """
         
-        self._include_auxiliary = include_auxiliary
-        
         super().__init__(
             dataset,
             info=info,
-            derived=derived,
-            show_derived=show_derived,
+            edit_copies=True,
+            new_images_origin=new_images_origin,
+            show_new_images=show_new_images,
             start_idx=start_idx,
             out=out,
-            mark_styles=[None, MarkStyle("Has derived images", "#9333ea")],
+            mark_styles=[None, MarkStyle("Has new images", "#9333ea")],
         )
     
-    @property
-    def derived(self) -> DerivedImages:
-        return self._derived
+    @typing.override
+    def _makes_new_images(self) -> bool:
+        return True
     
     messages: typing.ClassVar[Messages] = Messages()
     messages.register_messages(dict(
@@ -100,9 +94,9 @@ class DeriveWidget(ImageViewerWidget):
     ))
     
     def _find_child(self, path: str) -> TaggedImage | None:
-        image = self._derived.get(pathlib.Path(path))
+        image = next((image for image in self._source if image.path == pathlib.Path(path)), None)
         if image is None:
-            logger.warning(f"Unknown derived image {path}")
+            logger.warning(f"Unknown new image {path}")
         return image
     
     @command
@@ -111,9 +105,9 @@ class DeriveWidget(ImageViewerWidget):
         
         image = self._find_child(msg.path)
         if image is None:
-            raise ValueError(f"Unknown derived image {msg.path}")
+            raise ValueError(f"Unknown new image {msg.path}")
         
-        self._derived.open_in_editor(image)
+        image.open_editor()
     
     @messages.register_handler
     def _do_delete_derived(self, msg: DeleteDerivedMessage) -> None:
@@ -121,7 +115,7 @@ class DeriveWidget(ImageViewerWidget):
         
         image = self._find_child(msg.path)
         if image is not None:
-            self._derived.remove(image)
+            self._new_images_dataset().remove_new_image(image)
             self.refresh()
     
     @messages.register_handler
@@ -130,13 +124,13 @@ class DeriveWidget(ImageViewerWidget):
     
     @typing.override
     def _on_show(self, image: TaggedImage | None) -> None:
-        children = self._derived.children_of(image, include_auxiliary=self._include_auxiliary) if image is not None else []
+        children = self._new_images_dataset().children_of(image) if image is not None else []
         
         self.children = [
             DerivedImageInfo(
                 path=str(child.path),
                 name=child.path.name,
-                kind=self._derived.kind_of(child) or "",
+                kind="crop" if child.crop_box is not None else "edit",
                 key=image_key(child.path),
             )
             for child in children
@@ -144,7 +138,7 @@ class DeriveWidget(ImageViewerWidget):
     
     @typing.override
     def _mark(self, image: TaggedImage) -> int:
-        return int(bool(self._derived.children_of(image, include_auxiliary=self._include_auxiliary)))
+        return int(bool(self._new_images_dataset().children_of(image)))
 
 
 __all__ = [

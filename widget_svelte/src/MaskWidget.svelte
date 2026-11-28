@@ -14,7 +14,7 @@ import { onDestroy, untrack } from "svelte";
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
   import { throttled } from "./confirm.svelte";
-  import { Notifier } from "./notifier.svelte";
+  import { Notifier, ActionStatus } from "./notifier.svelte";
   import Viewer from "./Viewer.svelte";
   import Button from "./Button.svelte";
 import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
@@ -117,14 +117,11 @@ import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
     if (dirty) {
       await save();
     }
-    notifier.track(
-      invoke(experimental, "edit_externally", {}),
-      "Opening the mask in the image editor...",
-      "Opened in the image editor. Changes are imported when you come back here",
-    );
+    externalStatus.run(invoke(experimental, "edit_externally", {}));
   }
 
   const notifier = new Notifier();
+  const externalStatus = new ActionStatus(notifier);
 
   // The mask might have been edited externally, so check for changes when the user comes back
   const onfocus = throttled(() => sendMessage(model, "import_external"));
@@ -212,6 +209,7 @@ import MaskCanvas, { type BrushMode } from "./MaskCanvas.svelte";
     <div class="flex flex-row flex-wrap items-center gap-2">
       <Button
         icon={IconExternalLink}
+        status={externalStatus.state}
         onclick={editExternally}
         title="Open the image and the mask as layers in the external editor (e.g. Krita). Saved changes are imported when you come back."
       >

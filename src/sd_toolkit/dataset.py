@@ -1,6 +1,5 @@
 import typing
 import pathlib
-import re
 import copy
 import shutil
 import collections
@@ -8,233 +7,439 @@ import math
 import itertools
 import contextlib
 import functools
+import weakref
 
 from loguru import logger
-import attrs
 from attrs import define, field
-import ipywidgets
 import rich.console
+from PIL import Image
 
 from sd_toolkit.tags import Tags, TagsLike, Tag, TagLike
 from sd_toolkit.naming_strategy import NamingStrategy, DefaultNaming
-from sd_toolkit.storage import save, load
-from sd_toolkit.config import Config
-from sd_toolkit.misc import open_file
+from sd_toolkit.storage import CBOR_CONVERTER, save, load
+from sd_toolkit.metadata import Metadata, MetadataUpdate
+from sd_toolkit.image import TaggedImage, img_origin, img_derived_from, img_crop_box
+from sd_toolkit.roots import Root, NewImagesRoot, img_gallery_dl_post
+from sd_toolkit.masks import Mask, MaskStore
 if typing.TYPE_CHECKING:
     from sd_toolkit.widgets.viewer import InfoFunc
     from sd_toolkit.diff import DatasetDiff
     from sd_toolkit.widgets import PreviewWidget
-from sd_toolkit.metadata import Metadata, MetadataUpdate, MetadataField
-from sd_toolkit.gallery_dl import BaseGalleryDLPost
 
 
-@define()
-class TaggedImage:
-    path: pathlib.Path
-    tags: Tags
-    metadata: Metadata = field(factory=Metadata)
-    
-    def apply_metadata(self, *updates: typing.Callable[[Metadata], MetadataUpdate]) -> typing.Self:
-        self.metadata = self.metadata.update(*updates)
-        return self
-    
-    def clear_metadata(self) -> typing.Self:
-        return self.apply_metadata(Metadata.clear)
-    
-    def preview(self) -> ipywidgets.Image:
-        return ipywidgets.Image(value=self.path.read_bytes())
-    
-    def open_viewer(self) -> None:
-        open_file(self.path, command=Config.get().image_viewer_command)
-
-
-img_gallery_dl_post = MetadataField[BaseGalleryDLPost](
-    "gallery_dl_post",
-    BaseGalleryDLPost,
-)
-
-
-@define(repr=False, init=False)
+@define(repr=False, init=False, eq=False)
 class Dataset(typing.Sequence[TaggedImage]):
-    roots: list[pathlib.Path]
+    """
+    A list of tagged images, loaded from one or more roots (see `Root`), plus the masks attached to them
+    (see `Mask`).
+    
+    Some roots (see `NewImagesRoot`) can hold new images, made from the other images of the dataset
+    (e.g. edited copies or crops). When a new image enters the dataset, it gets a copy of the tags of the
+    image it was made from (and its metadata), and is placed right after it (and its other new images).
+    """
+    
+    roots: list[Root]
     # Note: cannot realistically be a nanotable.Table, because the tags need to be mutable without an explicit `rekey`.
     contents: list[TaggedImage]
-    
-    _IMAGE_FILE_EXT: typing.ClassVar[typing.Final[re.Pattern]] = re.compile(r"\.(jpg|jpeg|png|gif|webp)$", re.IGNORECASE)
+    masks: dict[pathlib.Path, list[Mask]]
+    """
+    The masks attached to each image, by its path.
+    """
+    mask_store: MaskStore | None
+    _base: weakref.ref[Dataset] | None = field(default=None)
+    """
+    For views (see `view`): the dataset this one is a view of. New images and masks added to a view are
+    added to its base as well.
+    """
     
     def __init__(
         self,
-        roots: list[pathlib.Path] | object = ...,
-        contents: list[TaggedImage] | object = ...,
+        *roots: Root,
+        masks: MaskStore | pathlib.Path | str | None = None,
+        checkpoint: pathlib.Path | str | None = None,
+        checkpoint_overwrite: bool = False,
+        checkpoint_test: bool = False,
+        checkpoint_diff: bool = False,
     ):
         """
-        Creates a dataset.
+        Loads a dataset from the given roots. With no roots, creates an empty dataset.
         
-        Either both `roots` and `contents` must be specified, or neither (in which
-        case an empty dataset is created). Passing only one of them is a mistake,
-        most likely from passing a list of images as `roots`.
+        :param masks: The directory to store the masks in (see `MaskStore`). Masks can't be added without one.
+        :param checkpoint: If specified, the dataset is loaded from this checkpoint file instead of the roots
+            (if the file exists), or saved to it after loading. See `checkpoint` (the `checkpoint_*` parameters
+            are the same as its parameters).
         """
         
-        if roots is ... and contents is ...:
-            roots = []
-            contents = []
-        elif roots is ... or contents is ...:
-            raise TypeError("Dataset requires either both `roots` and `contents`, or neither")
-        
         self.__attrs_init__(
-            roots=roots,
-            contents=contents,
+            roots=list(roots),
+            contents=[],
+            masks={},
+            mask_store=MaskStore.cast(masks),
         )
+        
+        if checkpoint is not None:
+            checkpoint = pathlib.Path(checkpoint)
+            
+            if checkpoint.exists() and not checkpoint_overwrite and not checkpoint_test:
+                saved = self._read_checkpoint(checkpoint)
+                if roots and saved.roots != self.roots:
+                    logger.warning(
+                        f"The roots saved in {checkpoint} are different from the specified ones, loading the checkpoint anyway. "
+                        f"Saved roots: {saved.roots!r}, specified roots: {self.roots!r}"
+                    )
+                self._assign_from(saved)
+                return
+        
+        self._load_roots()
+        
+        if checkpoint is not None:
+            self.checkpoint(checkpoint, overwrite=checkpoint_overwrite, test=checkpoint_test, diff=checkpoint_diff)
     
     @classmethod
-    def discover_files(
+    def from_contents(
         cls,
-        root: pathlib.Path | str,
+        roots: typing.Iterable[Root],
+        contents: typing.Iterable[TaggedImage],
         *,
-        ext: str | None = None,
-        ext_re: re.Pattern | str | None = None,
-        recurse: bool = False,
-    ) -> typing.Generator[pathlib.Path, None, None]:
-        if not ext and not ext_re:
-            raise TypeError("Must specify either ext or ext_re")
-        if ext and ext_re:
-            raise TypeError("Cannot specify both ext and ext_re")
-        
-        if isinstance(root, str):
-            root = pathlib.Path(root)
-        
-        candidates: typing.Iterable[pathlib.Path] = root.glob("**/*" + (ext or "")) if recurse else root.iterdir()
-        
-        if ext:
-            ext_re = re.compile(ext, re.IGNORECASE)
-        if isinstance(ext_re, str):
-            ext_re = re.compile(ext_re, re.IGNORECASE)
-        assert isinstance(ext_re, re.Pattern)
-        
-        for file in candidates:
-            if file.is_file() and ext_re.fullmatch(file.suffix):
-                yield file
-    
-    @classmethod
-    def fix_raw_exts(
-        cls,
-        root: pathlib.Path | str,
-        *,
-        recurse: bool = False,
-        dry_run: bool = False,
-    ) -> None:
-        if isinstance(root, str):
-            root = pathlib.Path(root)
-        
-        for caption_file in cls.discover_files(root, ext=".txt", recurse=recurse):
-            if len(caption_file.suffixes) >= 2 and cls._IMAGE_FILE_EXT.fullmatch(caption_file.suffixes[-2]):
-                new_path = caption_file.with_suffix("").with_suffix(".txt")
-                if dry_run:
-                    logger.info(f"Would rename {caption_file} to {new_path}")
-                    continue
-                logger.debug(f"Renaming {caption_file} to {new_path}")
-                caption_file.rename(new_path)
-    
-    @classmethod
-    def load_raw(
-        cls,
-        root: pathlib.Path | str,
-        *,
-        tag_separator: str = ",",
-        recurse: bool = True,
-        expect_no_tags: bool = False,
+        masks: typing.Mapping[pathlib.Path, typing.Iterable[Mask]] | None = None,
+        mask_store: MaskStore | pathlib.Path | str | None = None,
     ) -> Dataset:
-        if isinstance(root, str):
-            root = pathlib.Path(root)
+        """
+        Creates a dataset from its fields directly (without loading anything).
+        """
         
-        contents: list[TaggedImage] = []
+        result = cls.__new__(cls)
+        result.__attrs_init__(
+            roots=list(roots),
+            contents=list(contents),
+            masks={path: list(image_masks) for path, image_masks in (masks or {}).items()},
+            mask_store=MaskStore.cast(mask_store),
+        )
+        result._bind_masks()
+        return result
+    
+    def _load_roots(self) -> None:
+        images = [image for root in self.roots for image in root.load()]
+        logger.info(f"Loaded a dataset of {len(images)} images")
         
-        for img_file in cls.discover_files(root, ext_re=cls._IMAGE_FILE_EXT, recurse=recurse):
-            tags_file_candidates: list[pathlib.Path | None] = [
-                img_file.with_suffix(".txt"),
-                img_file.with_name(img_file.name + ".txt"),
-                None,
-            ]
-            
-            tags_file: pathlib.Path | None = next((x for x in tags_file_candidates if x is None or x.is_file()))
-            
-            if (tags_file is None) != expect_no_tags:
-                logger.info(f"Image {img_file} has {"no" if tags_file is None else "unexpected"} tags")
-            
-            tags: Tags = Tags.parse_plain(tags_file.read_text(), sep=tag_separator) if tags_file else Tags()
-            
-            logger.debug(f"Loading image {img_file} with tags {tags!r}")
-            
-            contents.append(TaggedImage(
-                path=img_file,
-                tags=tags,
-            ))
+        self.contents = [image for image in images if not image.derived_from]
+        # Shorter chains first, so that the parents are always placed before their new images
+        for image in sorted((image for image in images if image.derived_from), key=lambda image: len(image.derived_from)):
+            self._insert_new(image)
+    
+    # New images
+    
+    def new_images_root(self, origin: str | None = None) -> NewImagesRoot:
+        """
+        :param origin: The name of the root. If `None`, the first mutable root is used.
+        :returns: The root to store new images in.
+        """
         
-        logger.info(f"Loaded a dataset of {len(contents)} images")
+        for root in self.roots:
+            if root.is_mutable and (origin is None or root.name == origin):
+                assert isinstance(root, NewImagesRoot)
+                return root
         
-        return Dataset(
-            roots=[root],
-            contents=contents,
+        if origin is None:
+            raise ValueError(f"{self!r} has no root for new images (see `NewImagesRoot`)")
+        raise ValueError(f"{self!r} has no root for new images named {origin!r}")
+    
+    def has_new_images_root(self, origin: str | None = None) -> bool:
+        return any(root.is_mutable and (origin is None or root.name == origin) for root in self.roots)
+    
+    def _root_of(self, image: TaggedImage) -> NewImagesRoot:
+        for root in self.roots:
+            if isinstance(root, NewImagesRoot) and image.path.is_relative_to(root.path):
+                return root
+        raise ValueError(f"{image.path} is not in any root for new images")
+    
+    def _find(self, path: pathlib.Path) -> TaggedImage | None:
+        return next((image for image in self.contents if image.path == path), None)
+    
+    def _insert_new(self, image: TaggedImage) -> TaggedImage:
+        """
+        Places a new image after its closest ancestor in the dataset (and the ancestor's other new images),
+        inheriting its tags and metadata. Images without ancestors in the dataset keep their tags, and go to the end.
+        If an image with the same path is in the dataset already, that one is returned instead.
+        """
+        
+        existing = self._find(image.path)
+        if existing is not None:
+            return existing
+        
+        positions = {other.path: idx for idx, other in enumerate(self.contents)}
+        
+        for ancestor in reversed(image.derived_from):
+            idx = positions.get(ancestor)
+            if idx is None:
+                continue
+            
+            self._inherit(image, self.contents[idx])
+            
+            idx += 1
+            while idx < len(self.contents) and ancestor in self.contents[idx].derived_from:
+                idx += 1
+            
+            self.contents.insert(idx, image)
+            return image
+        
+        self.contents.append(image)
+        return image
+    
+    @staticmethod
+    def _inherit(image: TaggedImage, ancestor: TaggedImage) -> None:
+        # The index of a root only stores the new images' own metadata (the chain of origin, ...)
+        own = image.metadata
+        image.tags = ancestor.tags.clone()
+        image.metadata = Metadata(ancestor.metadata.contents | own.contents)
+        for own_field in (img_origin, img_crop_box):
+            if not own.has_is_set(own_field):
+                image.apply_metadata(own_field.unset())
+    
+    def _attach(self, image: TaggedImage) -> TaggedImage:
+        base = self._base() if self._base is not None else None
+        if base is not None:
+            image = base._attach(image)
+        
+        return self._insert_new(image)
+    
+    def _detach(self, image: TaggedImage) -> None:
+        base = self._base() if self._base is not None else None
+        if base is not None:
+            base._detach(image)
+        
+        self.contents = [other for other in self.contents if other.path != image.path]
+        self.masks.pop(image.path, None)
+    
+    def attach_new_images(
+        self,
+        origin: str | None = None,
+        *,
+        parents: typing.Iterable[TaggedImage] | None = None,
+    ) -> list[TaggedImage]:
+        """
+        Adds the images of a root for new images whose ancestors are in the dataset, but which aren't in the dataset
+        themselves. This is useful after loading a checkpoint that was saved before the new images were made.
+        Widgets that can make new images do this automatically.
+        
+        :param origin: The root's name. See `new_images_root`.
+        :param parents: If specified, only the images made (directly or indirectly) from these are added.
+        :returns: All the images of the root made from `parents` (or from any image of the dataset), whether they
+            were already in the dataset or not.
+        """
+        
+        root = self.new_images_root(origin)
+        ancestors = {image.path for image in (self.contents if parents is None else parents)}
+        
+        result: list[TaggedImage] = []
+        for image in sorted(root.load(), key=lambda image: len(image.derived_from)):
+            if not ancestors.intersection(image.derived_from):
+                continue
+            
+            image = self._attach(image)
+            ancestors.add(image.path)
+            result.append(image)
+        
+        return result
+    
+    def add_new_image(
+        self,
+        parent: TaggedImage,
+        write: typing.Callable[[pathlib.Path], None],
+        *,
+        label: str = "edit",
+        suffix: str | None = None,
+        key: str | None = None,
+        origin: str | None = None,
+        metadata: typing.Iterable[MetadataUpdate] = (),
+    ) -> TaggedImage:
+        """
+        Creates a new image made from `parent`, stores it in a root for new images, and adds it to the dataset.
+        
+        :param write: Called with the new image's path, must write the file.
+        :param label: Used in the new file's name.
+        :param suffix: The new file's extension. Defaults to the parent's one.
+        :param key: If specified, the image's path is determined by it (and the parent's path), and if such an
+            image exists already, it's reused (without calling `write`). Meant for reproducible images, like crops.
+        :param origin: The name of the root to store the image in. See `new_images_root`.
+        :param metadata: The new image's own metadata (besides `img_derived_from`). The rest is inherited from the parent.
+        """
+        
+        root = self.new_images_root(origin)
+        path = root.new_path(parent, label, suffix=suffix, key=key)
+        
+        if key is not None and (existing := root.get(path)) is not None:
+            if existing.path.is_file():
+                return self._attach(existing)
+            # The file was deleted, but the entry wasn't
+            root.remove(path, delete_file=False)
+        
+        write(path)
+        if not path.is_file():
+            raise RuntimeError(f"`write` did not create {path}")
+        
+        image = TaggedImage(
+            path=path,
+            tags=parent.tags.clone(),
+        ).apply_metadata(
+            img_derived_from.set((*parent.derived_from, parent.path)),
+            *metadata,
+        )
+        
+        return self._attach(root.add(image))
+    
+    def copy_for_edit(
+        self,
+        parent: TaggedImage,
+        *,
+        open_editor: bool = True,
+        suffix: str | None = None,
+        origin: str | None = None,
+    ) -> TaggedImage:
+        """
+        Creates a copy of `parent` and (by default) opens it in the image editor (see `Config.image_editor_command`).
+        
+        :param suffix: The format to save the copy in (e.g. `".png"`). Defaults to the parent's format.
+        :param origin: The name of the root to store the copy in. See `new_images_root`.
+        """
+        
+        # TODO: Save the edits as layered `.kra`/`.ora` documents (and read `mergedimage.png` from them)?
+        
+        def _write(path: pathlib.Path) -> None:
+            if path.suffix.lower() == parent.path.suffix.lower():
+                shutil.copyfile(parent.path, path)
+                return
+            
+            with Image.open(parent.path) as opened:
+                opened.save(path)
+        
+        image = self.add_new_image(parent, _write, label="edit", suffix=suffix, origin=origin)
+        
+        if open_editor:
+            image.open_editor()
+        
+        return image
+    
+    def crop(
+        self,
+        parent: TaggedImage,
+        box: tuple[int, int, int, int],
+        *,
+        origin: str | None = None,
+    ) -> TaggedImage:
+        """
+        Creates a cropped copy of `parent` (or reuses the existing one with the same box).
+        
+        :param box: The crop rectangle, as `(left, top, right, bottom)` in pixels.
+            Must lie within the image. Recorded in the `img_crop_box` metadata field.
+        :param origin: The name of the root to store the crop in. See `new_images_root`.
+        """
+        
+        box = tuple(int(x) for x in box)
+        left, top, right, bottom = box
+        
+        def _write(path: pathlib.Path) -> None:
+            with Image.open(parent.path) as opened:
+                if not (0 <= left < right <= opened.width and 0 <= top < bottom <= opened.height):
+                    raise ValueError(f"Invalid crop box {box} for an image of size {opened.size}")
+                opened.crop(box).save(path)
+        
+        return self.add_new_image(
+            parent,
+            _write,
+            label="crop",
+            key=f"crop{box}",
+            origin=origin,
+            metadata=[img_crop_box.set(box)],
         )
     
-    @classmethod
-    def load_gallery_dl(
-        cls,
-        root: pathlib.Path | str,
-        post_type: typing.Type[BaseGalleryDLPost] | str,
-        *,
-        save_full_metadata: bool = False,
-        recurse: bool = True,
-    ) -> Dataset:
-        if isinstance(root, str):
-            root = pathlib.Path(root)
+    def remove_new_image(self, image: TaggedImage, *, delete_file: bool = True) -> None:
+        """
+        Removes a new image from the dataset (and its base, for views) and from its root, along with its masks.
+        The images made from it are kept.
         
-        if isinstance(post_type, str):
-            if post_type not in BaseGalleryDLPost.REGISTRY:
-                raise ValueError(f"Unknown post type name {post_type!r}. Available types: {', '.join(f"{x!r}" for x in BaseGalleryDLPost.REGISTRY.keys())}")
-            
-            post_type = BaseGalleryDLPost.REGISTRY[post_type]
+        :param delete_file: Whether to also delete the file.
+        """
         
-        contents: list[TaggedImage] = []
+        self._root_of(image).remove(image.path, delete_file=delete_file)
+        self._detach(image)
+    
+    def children_of(self, image: TaggedImage | pathlib.Path) -> list[TaggedImage]:
+        """
+        :returns: The images of the dataset made directly from `image`.
+        """
         
-        for img_file in cls.discover_files(root, ext_re=cls._IMAGE_FILE_EXT, recurse=recurse):
-            metadata_file = img_file.with_name(img_file.name + ".json")
-            assert metadata_file.is_file()
-            
-            post = post_type.model_validate_json(metadata_file.read_text(encoding="utf-8"))
-            
-            image = TaggedImage(
-                path=img_file,
-                tags=post.extract_tags(),
-            )
-            
-            if save_full_metadata:
-                image.apply_metadata(img_gallery_dl_post.set(post))
-            
-            contents.append(image)
+        path = image.path if isinstance(image, TaggedImage) else image
+        return [other for other in self.contents if other.parent_path == path]
+    
+    # Masks
+    
+    def _bind_masks(self) -> None:
+        if self.mask_store is None:
+            return
         
-        logger.info(f"Loaded a dataset of {len(contents)} images")
+        for image_masks in self.masks.values():
+            for mask in image_masks:
+                mask._attach(self.mask_store)
+    
+    def masks_of(self, image: TaggedImage | pathlib.Path) -> list[Mask]:
+        path = image.path if isinstance(image, TaggedImage) else image
+        return list(self.masks.get(path, ()))
+    
+    def add_mask(self, image: TaggedImage, mask: Mask) -> Mask:
+        """
+        Attaches a mask to an image of the dataset (and saves it to the dataset's mask store).
+        The mask must have the same size as the image.
+        """
         
-        return Dataset(
-            roots=[root],
-            contents=contents,
-        )
+        if self.mask_store is None:
+            raise ValueError(f"{self!r} has no mask store, specify `masks` when creating it")
+        
+        with Image.open(image.path) as opened:
+            if mask.size != opened.size:
+                raise ValueError(f"Mask size {mask.size} doesn't match the image size {opened.size}")
+        
+        base = self._base() if self._base is not None else None
+        if base is not None:
+            base.add_mask(image, mask)
+        
+        mask._attach(self.mask_store)
+        
+        image_masks = self.masks.setdefault(image.path, [])
+        if not any(other is mask for other in image_masks):
+            image_masks.append(mask)
+        
+        return mask
+    
+    def remove_mask(self, image: TaggedImage | pathlib.Path, mask: Mask) -> None:
+        path = image.path if isinstance(image, TaggedImage) else image
+        
+        base = self._base() if self._base is not None else None
+        if base is not None:
+            base.remove_mask(path, mask)
+        
+        image_masks = [other for other in self.masks.get(path, ()) if other is not mask]
+        if image_masks:
+            self.masks[path] = image_masks
+        else:
+            self.masks.pop(path, None)
+    
+    # Misc
     
     @classmethod
     def merge(
         cls,
         *datasets: Dataset,
     ) -> Dataset:
-        roots = []
-        contents = []
+        mask_stores = {dataset.mask_store.root: dataset.mask_store for dataset in datasets if dataset.mask_store is not None}
+        if len(mask_stores) > 1:
+            logger.warning(f"Merging datasets with different mask stores, using the first one: {list(mask_stores)!r}")
         
-        for dataset in datasets:
-            roots.extend(dataset.roots)
-            contents.extend(dataset.contents)
-        
-        return Dataset(
-            roots=roots,
-            contents=contents,
+        return Dataset.from_contents(
+            roots=[root for dataset in datasets for root in dataset.roots],
+            contents=[image for dataset in datasets for image in dataset.contents],
+            masks={path: image_masks for dataset in datasets for path, image_masks in dataset.masks.items()},
+            mask_store=next(iter(mask_stores.values()), None),
         )
     
     def preview(
@@ -321,28 +526,34 @@ class Dataset(typing.Sequence[TaggedImage]):
     
     def _rel_path(self, path: pathlib.Path) -> pathlib.Path:
         for root in self.roots:
-            if path.is_relative_to(root):
-                return path.relative_to(root)
+            if path.is_relative_to(root.path):
+                return path.relative_to(root.path)
         
-        raise ValueError(f"Path {path} is not relative to any of {self.roots}")
+        raise ValueError(f"Path {path} is not relative to any of {[root.path for root in self.roots]}")
     
     def clone(self, deep: bool = True) -> Dataset:
         """
         Copies the dataset.
         
         :param deep: If `True`, the new dataset will be completely independent of the original.
-            If `False`, the `TaggedImage` objects will be the same (so changes to them in the
+            If `False`, the `TaggedImage` and `Mask` objects will be the same (so changes to them in the
             copy will reflect on the original).
         :returns: The created copy of the dataset.
         """
         
         if deep:
-            return copy.deepcopy(self)
+            result = copy.deepcopy(self)
+            result._base = None
+            return result
         
-        return Dataset(
+        return Dataset.from_contents(
             roots=self.roots,
-            contents=list(self.contents),
+            contents=self.contents,
+            masks=self.masks,
+            mask_store=self.mask_store,
         )
+    
+    # Checkpoints
     
     def save_checkpoint(self, path: pathlib.Path | str, *, overwrite: bool = False) -> None:
         if isinstance(path, str):
@@ -352,8 +563,8 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         save(self, path, overwrite=overwrite)
     
-    @classmethod
-    def load_checkpoint(cls, path: pathlib.Path | str) -> Dataset:
+    @staticmethod
+    def _read_checkpoint(path: pathlib.Path | str) -> Dataset:
         if isinstance(path, str):
             path = pathlib.Path(path)
         
@@ -363,11 +574,24 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         return result
     
-    def reload_checkpoint(self, path: pathlib.Path | str) -> None:
-        restored = self.load_checkpoint(path)
-        self._assign_from(restored)
+    def load_checkpoint(self, path: pathlib.Path | str) -> None:
+        """
+        Replaces the dataset's contents with the ones saved in a checkpoint. The mask store is kept,
+        unless the dataset doesn't have one.
+        """
+        
+        self._assign_from(self._read_checkpoint(path))
     
     def checkpoint(self, path: pathlib.Path | str, *, overwrite: bool = False, test: bool = False, diff: bool = False) -> None:
+        """
+        If the checkpoint file doesn't exist, saves the dataset to it. Otherwise, loads the dataset from it,
+        so that the (potentially slow or non-deterministic) steps before the checkpoint aren't repeated.
+        
+        :param overwrite: Always save the dataset, overwriting the file.
+        :param test: Raise an error if the saved dataset is different from the current one (or doesn't exist).
+        :param diff: With `test`, print the differences.
+        """
+        
         if isinstance(path, str):
             path = pathlib.Path(path)
         
@@ -380,7 +604,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         if overwrite:
             return self.save_checkpoint(path, overwrite=True)
         
-        saved = self.load_checkpoint(path)
+        saved = self._read_checkpoint(path)
         
         if test and saved != self:
             if diff:
@@ -390,9 +614,15 @@ class Dataset(typing.Sequence[TaggedImage]):
         self._assign_from(saved)
     
     def _assign_from(self, other: Dataset) -> None:
-        for field in attrs.fields(Dataset):
-            field: attrs.Attribute
-            setattr(self, field.name, getattr(other, field.name))
+        # Note: the base (for views) is kept, since it's not part of the dataset's contents
+        self.roots = other.roots
+        self.contents = other.contents
+        self.masks = other.masks
+        if self.mask_store is None:
+            self.mask_store = other.mask_store
+        elif other.mask_store is not None and other.mask_store != self.mask_store:
+            logger.info(f"Using the mask store {self.mask_store.root} instead of {other.mask_store.root}")
+        self._bind_masks()
     
     @typing.overload
     @classmethod
@@ -424,7 +654,7 @@ class Dataset(typing.Sequence[TaggedImage]):
             path = pathlib.Path(path)
         
         if path.exists():
-            return cls.load_checkpoint(path)
+            return cls._read_checkpoint(path)
         
         result = generator()
         result.save_checkpoint(path)
@@ -443,8 +673,22 @@ class Dataset(typing.Sequence[TaggedImage]):
         
         return DatasetDiff(old, self, flatten_tags=flatten_tags)
     
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Dataset):
+            return NotImplemented
+        
+        # Note: the mask store isn't compared, since it's just where the masks live
+        return (
+            self.roots == other.roots and
+            self.contents == other.contents and
+            {path: image_masks for path, image_masks in self.masks.items() if image_masks} ==
+            {path: image_masks for path, image_masks in other.masks.items() if image_masks}
+        )
+    
+    __hash__ = None
+    
     def __repr__(self) -> str:
-        return f"<Dataset of {len(self)} images at {", ".join(map(str, self.roots))}>"
+        return f"<Dataset of {len(self)} images at {", ".join(str(root.path) for root in self.roots)}>"
     
     @typing.overload
     def __getitem__(self, index: int) -> TaggedImage:
@@ -467,13 +711,13 @@ class Dataset(typing.Sequence[TaggedImage]):
         for img in self.contents:
             func(img)
         return self
-
+    
     def apply_to_tags(self, func: typing.Callable[[Tags], None]) -> typing.Self:
         return self.apply(lambda img: func(img.tags))
     
     def filter(self, pred: typing.Callable[[TaggedImage], bool]) -> typing.Self:
         """
-        Discards all images for which `pred` returns `False` from the dataset.
+        Discards all images for which `pred` returns `False` from the dataset (along with their masks).
         
         :param pred: The predicate to filter by.
         :returns: The same dataset instance, returned for convenient chaining.
@@ -483,6 +727,8 @@ class Dataset(typing.Sequence[TaggedImage]):
         """
         
         self.contents = [img for img in self.contents if pred(img)]
+        kept = {img.path for img in self.contents}
+        self.masks = {path: image_masks for path, image_masks in self.masks.items() if path in kept}
         return self
     
     def filter_on_tags(self, pred: typing.Callable[[Tags], bool]) -> typing.Self:
@@ -492,7 +738,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         """
         Returns a new dataset with only the images for which `pred` returns `True`.
         The image objects are the same, so changes to their tags will reflect on the
-        original dataset.
+        original dataset. New images and masks added to the view are added to the original dataset too.
         
         :param pred: The predicate to filter by.
         :returns: The new, filtered dataset.
@@ -502,7 +748,9 @@ class Dataset(typing.Sequence[TaggedImage]):
             If you want an independent copy, use `clone` additionally.
         """
         
-        return self.clone(deep=False).filter(pred)
+        result = self.clone(deep=False).filter(pred)
+        result._base = weakref.ref(self)
+        return result
     
     def view_on_tags(self, pred: typing.Callable[[Tags], bool]) -> Dataset:
         return self.view(lambda img: pred(img.tags))
@@ -510,7 +758,7 @@ class Dataset(typing.Sequence[TaggedImage]):
     def sort(self, key: typing.Callable[[TaggedImage], typing.Any]) -> typing.Self:
         self.contents.sort(key=key)
         return self
-
+    
     # TODO: More tags accessor(s)
     def all_tags(self) -> Tags:
         """
@@ -568,7 +816,7 @@ class Dataset(typing.Sequence[TaggedImage]):
         for tag, pair_freq in frequencies_target.items():
             p_tag_target = pair_freq / count_target
             p_tag_total = frequencies_total[tag] / count_total
-
+            
             lift = p_tag_target / p_tag_total
             pmi = math.log(lift) * pair_freq
             result[tag] = pmi
@@ -583,8 +831,30 @@ class Dataset(typing.Sequence[TaggedImage]):
         }
 
 
+@CBOR_CONVERTER.register_unstructure_hook
+def _unstructure_Dataset(dataset: Dataset) -> dict[str, typing.Any]:
+    return dict(
+        roots=CBOR_CONVERTER.unstructure(dataset.roots, list[Root]),
+        contents=CBOR_CONVERTER.unstructure(dataset.contents, list[TaggedImage]),
+        masks=CBOR_CONVERTER.unstructure(
+            {path: image_masks for path, image_masks in dataset.masks.items() if image_masks},
+            dict[pathlib.Path, list[Mask]],
+        ),
+        mask_store=str(dataset.mask_store.root) if dataset.mask_store is not None else None,
+    )
+
+
+@CBOR_CONVERTER.register_structure_hook
+def _structure_Dataset(data: dict[str, typing.Any], cls: type[Dataset]) -> Dataset:
+    # Note: old checkpoints only have the roots (as plain paths) and the contents
+    return Dataset.from_contents(
+        roots=CBOR_CONVERTER.structure(data["roots"], list[Root]),
+        contents=CBOR_CONVERTER.structure(data["contents"], list[TaggedImage]),
+        masks=CBOR_CONVERTER.structure(data.get("masks", {}), dict[pathlib.Path, list[Mask]]),
+        mask_store=data.get("mask_store"),
+    )
+
+
 __all__ = [
     "Dataset",
-    "TaggedImage",
-    "img_gallery_dl_post",
 ]

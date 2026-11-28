@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
   import type { HTMLButtonAttributes } from "svelte/elements";
+  import IconLoader from "@lucide/svelte/icons/loader-circle";
+  import type { ActionState } from "./notifier.svelte";
 
   interface Props extends HTMLButtonAttributes {
     /**
@@ -14,6 +16,8 @@
     active?: boolean;
     size?: "md" | "sm";
     icon?: Component<any>;
+    /** The state of the button's action (see `ActionStatus`): shows a spinner while pending, then flashes. */
+    status?: ActionState;
     children?: Snippet;
   };
 
@@ -22,6 +26,7 @@
     active = false,
     size = "md",
     icon: Icon,
+    status = "idle",
     children,
     class: extraClass = "",
     type = "button",
@@ -30,11 +35,21 @@
 </script>
 
 <button
-  class={["btn", `btn--${size}`, active ? "btn--active" : `btn--${variant}`, extraClass]}
+  class={[
+    "btn",
+    `btn--${size}`,
+    active ? "btn--active" : `btn--${variant}`,
+    status == "success" && "flash-success",
+    status == "error" && "flash-error",
+    extraClass,
+  ]}
+  aria-busy={status == "pending"}
   {type}
   {...rest}
 >
-  {#if Icon}
+  {#if status == "pending"}
+    <IconLoader class={[size == "sm" ? "w-3.5 h-3.5 shrink-0" : "w-4 h-4 shrink-0", "animate-spin"]} />
+  {:else if Icon}
     <Icon class={size == "sm" ? "w-3.5 h-3.5 shrink-0" : "w-4 h-4 shrink-0"} />
   {/if}
   {@render children?.()}
@@ -73,5 +88,27 @@
 
   .btn--confirm-danger {
     @apply bg-red-600 text-white ring-red-400 not-disabled:hover:bg-red-700;
+  }
+
+  .flash-success {
+    animation: flash-success 900ms ease-out;
+  }
+
+  .flash-error {
+    animation: flash-error 1500ms ease-out;
+  }
+
+  @keyframes flash-success {
+    from {
+      background-color: rgb(209 250 229);
+      box-shadow: 0 0 0 3px rgb(52 211 153 / 0.5);
+    }
+  }
+
+  @keyframes flash-error {
+    from {
+      background-color: rgb(254 226 226);
+      box-shadow: 0 0 0 3px rgb(248 113 113 / 0.5);
+    }
   }
 </style>

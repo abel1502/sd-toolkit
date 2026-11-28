@@ -6,7 +6,7 @@
   import { onDestroy, untrack } from "svelte";
   import type { WidgetProps } from "./anywidget.svelte";
   import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
-  import { Notifier } from "./notifier.svelte";
+  import { Notifier, ActionStatus } from "./notifier.svelte";
   import { ImageLoader } from "./imageLoader";
   import type { Shortcut } from "./hotkeys";
   import type { ViewerTraits } from "./types";
@@ -36,21 +36,18 @@
   const children = useTrait(model, "children");
 
   const notifier = new Notifier();
+  const editStatus = new ActionStatus(notifier);
+  const openStatus = new ActionStatus(notifier);
+  /** The child that `openStatus` is about. */
+  let opening: string | null = $state(null);
 
   function editCopy() {
-    notifier.track(
-      invoke(experimental, "edit_copy", {}),
-      "Creating an edited copy...",
-      "Opened the copy in the image editor",
-    );
+    editStatus.run(invoke(experimental, "edit_copy", {}));
   }
 
   function openDerived(child: DerivedImageInfo) {
-    notifier.track(
-      invoke(experimental, "open_derived", { path: child.path }),
-      "Opening in the image editor...",
-      "Opened in the image editor",
-    );
+    opening = child.path;
+    openStatus.run(invoke(experimental, "open_derived", { path: child.path }));
   }
 
   const confirmDelete = new TwoStepConfirm<string>();
@@ -89,7 +86,7 @@
 >
   {#snippet side()}
     <div class="flex flex-row flex-wrap items-center gap-2">
-      <Button variant="primary" icon={IconImagePlus} onclick={editCopy}>Create an edited copy</Button>
+      <Button variant="primary" icon={IconImagePlus} status={editStatus.state} onclick={editCopy}>Create an edited copy</Button>
       <Button
         icon={IconRefresh}
         onclick={refresh}
@@ -99,7 +96,7 @@
       </Button>
 </div>
 
-    <span class="text-sm font-semibold text-slate-600">Derived images ({children.value.length})</span>
+    <span class="text-sm font-semibold text-slate-600">New images ({children.value.length})</span>
 
     <div class="flex flex-row flex-wrap gap-3">
       {#each children.value as child (child.path)}
@@ -113,7 +110,15 @@
             <b>{child.kind}</b> {child.name}
           </span>
           <div class="flex flex-row gap-1">
-            <Button size="sm" class="flex-1" icon={IconPencilLine} onclick={() => openDerived(child)}>Edit</Button>
+            <Button
+              size="sm"
+              class="flex-1"
+              icon={IconPencilLine}
+              status={opening == child.path ? openStatus.state : "idle"}
+              onclick={() => openDerived(child)}
+            >
+              Edit
+            </Button>
             <Button
               size="sm"
               class="flex-1"

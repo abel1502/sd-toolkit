@@ -14,7 +14,7 @@
     error?: string | null;
     badge?: MarkStyle | null;
     buttons?: ImageButton[];
-    /** A status message shown over the image (e.g. after clicking a button). */
+    /** A status message shown over the image (e.g. when an action fails). */
     notice?: Notice | null;
     /** Replaces the plain `<img>`. */
     content?: Snippet;
@@ -83,11 +83,44 @@
 
   {#if buttons.length > 0}
     <div class="absolute bottom-0 right-0 px-2 py-1 bg-black/20 h-10 flex gap-2 items-center rounded-tl-lg">
-      {#each buttons as { icon: Icon, title, onclick }}
-        <button class="text-white" {title} {onclick}>
-          <Icon class="w-6 h-6" />
+      {#each buttons as { icon: Icon, title, onclick, status = "idle" }}
+        <button
+          class={["text-white rounded-full", status == "success" && "flash-success", status == "error" && "flash-error"]}
+          {title}
+          aria-busy={status == "pending"}
+          {onclick}
+        >
+          {#if status == "pending"}
+            <IconLoader class="w-6 h-6 animate-spin" />
+          {:else}
+            <Icon class="w-6 h-6" />
+          {/if}
         </button>
       {/each}
     </div>
   {/if}
 </div>
+
+<style>
+  .flash-success {
+    animation: flash-success 900ms ease-out;
+  }
+
+  .flash-error {
+    animation: flash-error 1500ms ease-out;
+  }
+
+  @keyframes flash-success {
+    from {
+      color: rgb(110 231 183);
+      filter: drop-shadow(0 0 4px rgb(52 211 153));
+    }
+  }
+
+  @keyframes flash-error {
+    from {
+      color: rgb(252 165 165);
+      filter: drop-shadow(0 0 4px rgb(248 113 113));
+    }
+  }
+</style>

@@ -11,9 +11,8 @@ import cachetools
 from PIL import Image
 
 from sd_toolkit.tags import Tag, Tags, tag_category, tag_origin, tag_confidence, tag_is_trigger
-from sd_toolkit.dataset import TaggedImage
+from sd_toolkit.dataset import Dataset, TaggedImage
 from sd_toolkit.widgets.base import Messages, Buffers, command, use_cattrs, BaseWidget
-from sd_toolkit.derived import DerivedImages
 
 
 type InfoFunc = (
@@ -179,29 +178,34 @@ class ImageViewerWidget(BaseWidget):
     _source: typing.Sequence[TaggedImage]
     _dataset: typing.Sequence[TaggedImage]
     _known_paths: set[pathlib.Path]
+    _initial_paths: set[pathlib.Path]
     _info: InfoFunc | None
-    _derived: DerivedImages | None
-    _show_derived: bool
+    _new_images_origin: str | None
+    _can_make_new_images: bool
+    _show_new_images: bool
     
     def __init__(
         self,
         dataset: typing.Sequence[TaggedImage],
         *,
         info: InfoFunc | None = None,
-        derived: DerivedImages | None = None,
-        show_derived: bool = True,
+        edit_copies: bool = True,
+        new_images_origin: str | None = None,
+        show_new_images: bool = True,
         start_idx: int = 0,
         skip_reviewed: bool = False,
         out: ipywidgets.Output | None = None,
         **kwargs,
     ):
         """
-        :param dataset: The images to show.
+        :param dataset: The images to show. Making new images (edited copies, crops, ...) requires a `Dataset`
+            with a root for new images (see `NewImagesRoot`).
         :param info: Computes additional properties to display for each image. See `InfoFunc`.
-        :param derived: If specified, enables creating edited copies of images
-            (which are stored in `derived`).
-        :param show_derived: If `True` (and `derived` is specified), the (non-auxiliary) images derived
-            from each image are shown right after it. See `DerivedImages.attach`.
+        :param edit_copies: Whether to allow creating edited copies of the images (if the dataset supports it).
+            This also adds the existing new images made from the shown images to the dataset (see
+            `Dataset.attach_new_images`), e.g. after loading a checkpoint saved before they were made.
+        :param new_images_origin: The name of the root to store new images in (see `Dataset.new_images_root`).
+        :param show_new_images: Whether to show the new images (they're placed right after the images they were made from).
         :param start_idx: The image to start at.
         :param skip_reviewed: If `True`, starts at the first image at or after `start_idx` that
             isn't reviewed yet (as defined by the subclass, see `_is_reviewed`).
@@ -211,9 +215,19 @@ class ImageViewerWidget(BaseWidget):
         
         self._source = dataset
         self._info = info
-        self._derived = derived
-        self._show_derived = show_derived
+        self._new_images_origin = new_images_origin
+        self._can_make_new_images = (
+            (edit_copies or self._makes_new_images()) and
+            isinstance(dataset, Dataset) and
+            dataset.has_new_images_root(new_images_origin)
+        )
+        if self._makes_new_images() and not self._can_make_new_images:
+            if not isinstance(dataset, Dataset):
+                raise TypeError(f"{type(self).__name__} requires a `Dataset`, got {type(dataset)!r}")
+            dataset.new_images_root(new_images_origin)  # Raises a descriptive error
+        self._show_new_images = show_new_images
         self._known_paths = set()
+        self._initial_paths = {image.path for image in dataset}
         self._dataset = self._build_dataset()
         
         if skip_reviewed:
@@ -224,7 +238,7 @@ class ImageViewerWidget(BaseWidget):
         
         super().__init__(
             image_count=len(self._dataset),
-            can_edit_copy=derived is not None,
+            can_edit_copy=self._can_make_new_images and edit_copies,
             out=out,
             **kwargs,
         )
@@ -237,14 +251,38 @@ class ImageViewerWidget(BaseWidget):
     @property
     def dataset(self) -> typing.Sequence[TaggedImage]:
         """
-        The images shown by the widget (including the derived ones, if `show_derived` is on).
+        The images shown by the widget.
         """
         
         return self._dataset
     
     @property
-    def derived(self) -> DerivedImages | None:
-        return self._derived
+    def source(self) -> typing.Sequence[TaggedImage]:
+        """
+        The dataset the widget was created with (including the new images added to it).
+        """
+        
+        return self._source
+    
+    @property
+    def new_images(self) -> list[TaggedImage]:
+        """
+        The new images (edited copies, crops, ...) in the dataset that were made (directly or not) from the images
+        the widget was created with, including the ones made in earlier sessions.
+        """
+        
+        return [
+            image for image in self._source
+            if image.path not in self._initial_paths and self._initial_paths.intersection(image.derived_from)
+        ]
+    
+    def _new_images_dataset(self) -> Dataset:
+        """
+        The dataset, for making new images.
+        """
+        
+        assert isinstance(self._source, Dataset) and self._can_make_new_images
+        return self._source
     
     @property
     def current_image(self) -> TaggedImage | None:
@@ -273,22 +311,26 @@ class ImageViewerWidget(BaseWidget):
         return max(0, min(idx, max_idx))
     
     def _build_dataset(self) -> typing.Sequence[TaggedImage]:
-        dataset = self._source
-        if self._derived is not None and self._show_derived:
-            # Note: no tag inheritance, as it would discard the tag changes made to the derived images
-            dataset = self._derived.attach(dataset, inherit_tags=False)
+        if self._can_make_new_images:
+            self._new_images_dataset().attach_new_images(
+                self._new_images_origin,
+                parents=[image for image in self._source if image.path in self._initial_paths],
+            )
         
-        new_images = [image for image in dataset if image.path not in self._known_paths]
-        self._known_paths.update(image.path for image in new_images)
-        if new_images:
+        # Note: preparing images may add new ones (e.g. restoring saved crops), which need to be prepared too
+        while new_images := [image for image in self._source if image.path not in self._known_paths]:
+            self._known_paths.update(image.path for image in new_images)
             self._prepare_images(new_images)
         
-        return dataset
+        return [
+            image for image in self._source
+            if (self._show_new_images or not image.derived_from) and self._include(image)
+        ]
     
     def refresh(self) -> None:
         """
         Re-syncs everything with the frontend. Call it if you've changed the images externally
-        (including adding or removing derived images).
+        (including adding or removing images).
         """
         
         current = self.current_image
@@ -342,8 +384,10 @@ class ImageViewerWidget(BaseWidget):
         except OSError as e:
             result.append(InfoItem("Error", str(e)))
         
-        if self._derived is not None and (parent := self._derived.parent_path_of(image)) is not None:
-            result.append(InfoItem("Derived from", f"{parent} ({self._derived.kind_of(image)})"))
+        if (parent := image.parent_path) is not None:
+            result.append(InfoItem("Made from", str(parent)))
+            if (box := image.crop_box) is not None:
+                result.append(InfoItem("Crop box", f"{box} ({box[2] - box[0]}×{box[3] - box[1]})"))
         
         if isinstance(self._info, typing.Mapping):
             for key, func in self._info.items():
@@ -375,9 +419,23 @@ class ImageViewerWidget(BaseWidget):
     
     def _prepare_images(self, images: list[TaggedImage]) -> None:
         """
-        Called once for every image that enters the widget (initially, and on `refresh` for newly
-        derived images), before it's shown or marked. E.g. for applying saved changes.
+        Called once for every image that enters the widget (initially, and on `refresh` for new
+        images), before it's shown or marked. E.g. for applying saved changes.
         """
+    
+    def _include(self, image: TaggedImage) -> bool:
+        """
+        Whether to show an image (called after `_prepare_images`).
+        """
+        
+        return True
+    
+    def _makes_new_images(self) -> bool:
+        """
+        Whether the widget's main purpose is making new images (so it requires a root for them).
+        """
+        
+        return False
     
     def _is_reviewed(self, image: TaggedImage) -> bool:
         """
@@ -408,10 +466,7 @@ class ImageViewerWidget(BaseWidget):
         The paths the frontend is allowed to request images from.
         """
         
-        yield from (image.path for image in self._dataset)
-        
-        if self._derived is not None:
-            yield from (image.path for image in self._derived)
+        yield from (image.path for image in self._source)
     
     # Messages and commands
     
@@ -443,10 +498,10 @@ class ImageViewerWidget(BaseWidget):
         image = self.current_image
         if image is None:
             raise ValueError("No image is shown")
-        if self._derived is None:
-            raise ValueError("No `derived` store was given to the widget")
+        if not self._can_make_new_images:
+            raise ValueError("The widget's dataset has no root for new images")
         
-        self._derived.copy_for_edit(image)
+        self._new_images_dataset().copy_for_edit(image, origin=self._new_images_origin)
         self.refresh()
     
     @command

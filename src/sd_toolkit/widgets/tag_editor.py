@@ -11,7 +11,6 @@ from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.storage import load, save
 from sd_toolkit.widgets.base import Messages, use_cattrs
 from sd_toolkit.widgets.viewer import ImageViewerWidget, InfoFunc, MarkStyle, TagDisplay
-from sd_toolkit.derived import DerivedImages
 
 
 type OnMismatch = typing.Literal["skip", "diff", "raise"]
@@ -253,8 +252,9 @@ class TagEditorWidget(ImageViewerWidget):
         make_tag: typing.Callable[[Tag], Tag] | None = None,
         vocabulary: TagsLike | None = None,
         info: InfoFunc | None = None,
-        derived: DerivedImages | None = None,
-        show_derived: bool = True,
+        edit_copies: bool = True,
+        new_images_origin: str | None = None,
+        show_new_images: bool = True,
         start_idx: int = 0,
         out: ipywidgets.Output | None = None,
     ):
@@ -270,9 +270,9 @@ class TagEditorWidget(ImageViewerWidget):
         :param vocabulary: Additional tags to suggest when adding tags (the tags present in the
             dataset are always suggested).
         :param info: Computes additional properties to display for each image.
-        :param derived: If specified, enables creating edited copies of images, and shows the
-            derived images after their parents.
-        :param show_derived: Whether to show the images derived from each image right after it.
+        :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
+        :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
+        :param show_new_images: Whether to show the new images made from the images. See `ImageViewerWidget`.
         :param start_idx: The image to start at.
         :param out: If specified, the output of event handlers will be captured into it.
         """
@@ -299,8 +299,9 @@ class TagEditorWidget(ImageViewerWidget):
         super().__init__(
             dataset,
             info=info,
-            derived=derived,
-            show_derived=show_derived,
+            edit_copies=edit_copies,
+            new_images_origin=new_images_origin,
+            show_new_images=show_new_images,
             start_idx=start_idx,
             out=out,
             vocabulary=sorted({tag.to_hierarchical_str() for tag in all_tags}),
