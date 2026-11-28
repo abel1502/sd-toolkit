@@ -12,16 +12,23 @@
 - Add character-to-series inference, either to the autotagger or as a Tags method?
 - Add danbooru tag database knowledge (currently only pixiv aliases, perhaps also category inference and more)
 - Add LLM-powered autotagging for OCR
-- Derived images (`MutableRoot`):
-  - Add video and ugoira (zip) frame extraction. Programmatic and with widget.
+- MutableRoot:
+  - Add video and ugoira (zip of numbered image files, 000000.jpg, 000001.jpg, etc.) frame extraction. Programmatic and with widget.
   - Settle the semantics (immutability/locking, tag inheritance, interaction with `Dataset.filter`, garbage collection, mask export layout for AI-toolkit)
-  - Add resizing images
-  - A `TaggedImage` method for deliberately inheriting the tags of its parents (new images start untagged)?
+  - Add resizing images (no widget needed, just for downscaling the large ones)
+  - A `TaggedImage` method for deliberately inheriting the tags of its parents (new images start untagged)
+    - Also a dataset-wide helper
+    - Metadata is never inherited
+    - Which parent (index, or TaggedImage, or all existing parents) is configurable
+    - Parameters for overriding confidence and origin for inherited tags
   - Also a method importing parents' masks for crops, same-size edits and resizes
+    - Again with a dataset-wide helper
+    - Same mechanism for parent selection
 - Automatic tag refinement: pick the subset of a source's tags that applies to a particular image (e.g. a crop of a tagged image, or one image of a multi-image pixiv post, where the post's tags apply to all of them), possibly adding common extras like `cropped, out_of_frame`
 - `TagEditorWidget` UX:
   - Undo and redo
   - Customizable sorting/structuring of the displayed tags
+- A widget for distributing tags between characters?
 - AI-toolkit config generation?
   - Generalize under one abstraction, perhaps?
   - Support multiple datasets in both cases
