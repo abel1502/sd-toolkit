@@ -209,10 +209,12 @@ class MutableRoot(Root):
     A mutable root, holding images made from other images of the dataset (edited copies, crops, ...).
     The new images are linked to the images they were made from via the `img_derived_from` metadata field.
     
-    The directory has an index file that lists the new images, which is updated immediately whenever
-    images are added or removed. So, new images persist regardless of dataset checkpoints. Note that the
-    index only remembers the images' paths, metadata and their tags at the time they were added (usually
-    none). The tags they get later are part of the dataset (and its checkpoints), like for any other image.
+    The dataset (and its checkpoints) is the source of truth for which new images exist, so loading this root
+    doesn't load any images (unless `recover` is set). The widgets that make new images (see `NewImagesWidget`)
+    record the images they made, and re-add them to the dataset when they're created again.
+    
+    The directory also has a provenance file, which maps every new image to the chain of images it was
+    made from (and nothing else), so that the images can be recovered if needed (see `recover`).
     
     Usually you don't need to call the methods of this class directly, use the ones of `Dataset`
     (e.g. `Dataset.copy_for_edit` or `Dataset.crop`) instead.
@@ -220,10 +222,13 @@ class MutableRoot(Root):
     
     KIND: typing.ClassVar[str] = "mutable"
     
-    # Note: the index is re-read on every access instead of being cached, so that copies of the root
-    # (e.g. in deep-cloned datasets) can't get out of sync.
+    PROVENANCE_FILE_NAME: typing.ClassVar[str] = "_provenance.bin"
     
-    INDEX_FILE_NAME: typing.ClassVar[str] = "_index.bin"
+    recover: bool = field(default=False, kw_only=True, eq=False)
+    """
+    If `True`, loading the root loads all the new images in the provenance file whose files exist (untagged,
+    and without any metadata except `img_derived_from`). Meant for recovering lost images, not for regular use.
+    """
     
     @property
     @typing.override
@@ -231,55 +236,50 @@ class MutableRoot(Root):
         return True
     
     @property
-    def index_path(self) -> pathlib.Path:
-        return self.path / self.INDEX_FILE_NAME
+    def provenance_path(self) -> pathlib.Path:
+        return self.path / self.PROVENANCE_FILE_NAME
     
-    def entries(self) -> list[TaggedImage]:
+    def provenance(self) -> dict[pathlib.Path, tuple[pathlib.Path, ...]]:
         """
-        All the images in the index, including the ones whose files are missing.
+        The new image path -> the paths of the images it was made from (see `img_derived_from`).
+        Includes the images whose files are missing.
         """
         
-        if not self.index_path.is_file():
-            return []
+        if not self.provenance_path.is_file():
+            return {}
         
-        # The index stores the paths relative to the root, so that the root can be moved around
-        return [
-            attrs.evolve(image, path=self.path / image.path)
-            for image in load(list[TaggedImage], self.index_path)
-        ]
+        # The file stores the new images' paths relative to the root, so that the root can be moved around
+        return {
+            self.path / path: chain
+            for path, chain in load(dict[pathlib.Path, tuple[pathlib.Path, ...]], self.provenance_path).items()
+        }
     
-    def _write_entries(self, entries: list[TaggedImage]) -> None:
+    def _write_provenance(self, provenance: dict[pathlib.Path, tuple[pathlib.Path, ...]]) -> None:
         self.path.mkdir(parents=True, exist_ok=True)
         save(
-            [attrs.evolve(image, path=image.path.relative_to(self.path)) for image in entries],
-            self.index_path,
-            as_type=list[TaggedImage],
+            {path.relative_to(self.path): chain for path, chain in provenance.items()},
+            self.provenance_path,
+            as_type=dict[pathlib.Path, tuple[pathlib.Path, ...]],
             overwrite=True,
         )
     
     @typing.override
     def load(self) -> list[TaggedImage]:
+        if not self.recover:
+            return []
+        
         result: list[TaggedImage] = []
         
-        for image in self.entries():
-            if not image.path.is_file():
-                logger.warning(f"New image {image.path} is missing, ignoring it")
+        for path, chain in self.provenance().items():
+            if not path.is_file():
+                logger.warning(f"New image {path} is missing, not recovering it")
                 continue
             
-            result.append(self._mark_origin(image))
+            result.append(self._mark_origin(TaggedImage(path=path, tags=Tags()).apply_metadata(img_derived_from.set(chain))))
+        
+        logger.info(f"Recovered {len(result)} new images from {self.path}")
         
         return result
-    
-    def get(self, path: pathlib.Path) -> TaggedImage | None:
-        image = next((image for image in self.entries() if image.path == path), None)
-        return self._mark_origin(image) if image is not None else None
-    
-    def children_of(self, parent: pathlib.Path) -> list[TaggedImage]:
-        """
-        :returns: The images made directly from `parent`.
-        """
-        
-        return [self._mark_origin(image) for image in self.entries() if image.parent() == parent]
     
     def new_path(self, parent: TaggedImage, label: str, *, suffix: str | None = None, key: str | None = None) -> pathlib.Path:
         """
@@ -304,9 +304,11 @@ class MutableRoot(Root):
             if not path.exists():
                 return path
     
-    def add(self, image: TaggedImage) -> TaggedImage:
+    def record(self, image: TaggedImage) -> TaggedImage:
         """
-        Registers an image (whose file must already exist in the root's directory).
+        Records the provenance of a new image (whose file must already exist in the root's directory).
+        
+        :returns: The same image, with its `img_origin` set.
         """
         
         if not image.path.is_relative_to(self.path):
@@ -314,28 +316,25 @@ class MutableRoot(Root):
         if not image.path.is_file():
             raise FileNotFoundError(f"{image.path} does not exist")
         
-        entries = self.entries()
-        if any(entry.path == image.path for entry in entries):
-            raise ValueError(f"{image.path} is already registered in {self.path}")
-        
-        entries.append(attrs.evolve(image, tags=image.tags.clone()))
-        self._write_entries(entries)
-        
-        logger.debug(f"Added new image {image.path} (made from {image.parent()})")
+        provenance = self.provenance()
+        if provenance.get(image.path) != image.derived_from:
+            provenance[image.path] = image.derived_from
+            self._write_provenance(provenance)
+            logger.debug(f"Recorded new image {image.path} (made from {image.parent()})")
         
         return self._mark_origin(image)
     
-    def remove(self, path: pathlib.Path, *, delete_file: bool = True) -> None:
+    def forget(self, path: pathlib.Path, *, delete_file: bool = True) -> None:
         """
-        Forgets an image. The images made from it are kept (they still know their whole chain of origin).
+        Removes an image from the provenance file. The images made from it are kept (they still know their
+        whole chain of origin).
+        
+        :param delete_file: Whether to also delete the file.
         """
         
-        entries = self.entries()
-        remaining = [entry for entry in entries if entry.path != path]
-        if len(remaining) == len(entries):
-            raise ValueError(f"{path} is not registered in {self.path}")
-        
-        self._write_entries(remaining)
+        provenance = self.provenance()
+        if provenance.pop(path, None) is not None:
+            self._write_provenance(provenance)
         
         if delete_file:
             path.unlink(missing_ok=True)

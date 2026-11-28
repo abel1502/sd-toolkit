@@ -5,7 +5,6 @@
   import { slide } from "svelte/transition";
   import IconZoomIn from "@lucide/svelte/icons/zoom-in";
   import IconInfo from "@lucide/svelte/icons/info";
-  import IconImagePlus from "@lucide/svelte/icons/image-plus";
   import IconSave from "@lucide/svelte/icons/save";
   import IconSaveOff from "@lucide/svelte/icons/save-off";
 
@@ -66,7 +65,6 @@
   const imageMarks = useTrait(_model, "image_marks");
   const markStyles = useTrait(_model, "mark_styles");
   const hasDoneScreen = useTrait(_model, "has_done_screen");
-  const canEditCopy = useTrait(_model, "can_edit_copy");
   const saveUnchanged = useTrait(_model, "save_unchanged");
 
   let maxIdx = $derived(hasDoneScreen.value ? imageCount.value : Math.max(0, imageCount.value - 1));
@@ -137,7 +135,6 @@
     goToImage({ idx: imageIdx.value - 1 });
   }
 
-  const editCopyStatus = new ActionStatus(untrack(() => notifier));
   const viewStatus = new ActionStatus(untrack(() => notifier));
 
   let allButtons: ImageButton[] = $derived([
@@ -149,12 +146,6 @@
       onclick: () => { saveUnchanged.value = !saveUnchanged.value; },
     }] : []),
     ...imageButtons,
-    ...(canEditCopy.value ? [{
-      icon: IconImagePlus,
-      title: "Create an edited copy (and open it in the image editor)",
-      onclick: () => editCopyStatus.run(invoke(experimental, "edit_copy", {})),
-      status: editCopyStatus.state,
-    }] : []),
     {
       icon: IconInfo,
       title: (showInfo ? "Hide" : "Show") + " image info",

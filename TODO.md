@@ -15,7 +15,9 @@
 - Derived images (`MutableRoot`):
   - Add video and ugoira (zip) frame extraction. Programmatic and with widget.
   - Settle the semantics (immutability/locking, tag inheritance, interaction with `Dataset.filter`, garbage collection, mask export layout for AI-toolkit)
+  - Add resizing images
   - A `TaggedImage` method for deliberately inheriting the tags of its parents (new images start untagged)?
+  - Also a method importing parents' masks for crops, same-size edits and resizes
 - Automatic tag refinement: pick the subset of a source's tags that applies to a particular image (e.g. a crop of a tagged image, or one image of a multi-image pixiv post, where the post's tags apply to all of them), possibly adding common extras like `cropped, out_of_frame`
 - `TagEditorWidget` UX:
   - Undo and redo

@@ -11,7 +11,7 @@ import cachetools
 from PIL import Image
 
 from sd_toolkit.tags import Tag, Tags, tag_category, tag_origin, tag_confidence, tag_is_trigger
-from sd_toolkit.dataset import Dataset, TaggedImage
+from sd_toolkit.dataset import TaggedImage
 from sd_toolkit.image import img_crop_box
 from sd_toolkit.widgets.base import Messages, Buffers, command, use_cattrs, BaseWidget
 
@@ -83,11 +83,6 @@ class SwitchImageMessage:
 
 @define
 class ViewImageRequest:
-    pass
-
-
-@define
-class EditCopyRequest:
     pass
 
 
@@ -174,7 +169,6 @@ class ImageViewerWidget(BaseWidget):
     Index 0 is the "no mark" style, and is usually `None`.
     """
     has_done_screen: bool = traitlets.Bool(False).tag(sync=True)
-    can_edit_copy: bool = traitlets.Bool(False).tag(sync=True)
     
     # Traitlets (Py <-> JS)
     save_unchanged: bool | None = traitlets.Bool(None, allow_none=True).tag(sync=True)
@@ -187,10 +181,7 @@ class ImageViewerWidget(BaseWidget):
     _source: typing.Sequence[TaggedImage]
     _dataset: typing.Sequence[TaggedImage]
     _known_paths: set[pathlib.Path]
-    _initial_paths: set[pathlib.Path]
     _info: InfoFunc | None
-    _new_images_origin: str | None
-    _can_make_new_images: bool
     _show_new_images: bool
     
     def __init__(
@@ -198,8 +189,6 @@ class ImageViewerWidget(BaseWidget):
         dataset: typing.Sequence[TaggedImage],
         *,
         info: InfoFunc | None = None,
-        edit_copies: bool = False,
-        new_images_origin: str | None = None,
         show_new_images: bool = True,
         start_idx: int = 0,
         skip_reviewed: bool = False,
@@ -207,15 +196,10 @@ class ImageViewerWidget(BaseWidget):
         **kwargs,
     ):
         """
-        :param dataset: The images to show. Making new images (edited copies, crops, ...) requires a `Dataset`
-            with a mutable root (see `MutableRoot`).
+        :param dataset: The images to show.
         :param info: Computes additional properties to display for each image. See `InfoFunc`.
-        :param edit_copies: Whether to allow creating edited copies of the images (if the dataset supports it).
-            This also adds the existing new images made from the shown images to the dataset (see
-            `Dataset.attach_new_images`), e.g. after loading a checkpoint saved before they were made.
-            Widgets whose purpose is making new images (e.g. `CropWidget`) always do the latter.
-        :param new_images_origin: The name of the root to store new images in (see `Dataset.mutable_root`).
-        :param show_new_images: Whether to show the new images (they're placed right after the images they were made from).
+        :param show_new_images: Whether to show the new images, i.e. edited copies, crops, ... (they're placed
+            right after the images they were made from). Only `NewImagesWidget`s make them.
         :param start_idx: The image to start at.
         :param skip_reviewed: If `True`, starts at the first image at or after `start_idx` that
             isn't reviewed yet (as defined by the subclass, see `_is_reviewed`).
@@ -225,19 +209,8 @@ class ImageViewerWidget(BaseWidget):
         
         self._source = dataset
         self._info = info
-        self._new_images_origin = new_images_origin
-        self._can_make_new_images = (
-            (edit_copies or self._makes_new_images()) and
-            isinstance(dataset, Dataset) and
-            dataset.has_mutable_root(new_images_origin)
-        )
-        if self._makes_new_images() and not self._can_make_new_images:
-            if not isinstance(dataset, Dataset):
-                raise TypeError(f"{type(self).__name__} requires a `Dataset`, got {type(dataset)!r}")
-            dataset.mutable_root(new_images_origin)  # Raises a descriptive error
         self._show_new_images = show_new_images
         self._known_paths = set()
-        self._initial_paths = {image.path for image in dataset}
         self._dataset = self._build_dataset()
         
         if skip_reviewed:
@@ -248,7 +221,6 @@ class ImageViewerWidget(BaseWidget):
         
         super().__init__(
             image_count=len(self._dataset),
-            can_edit_copy=self._can_make_new_images and edit_copies,
             out=out,
             **kwargs,
         )
@@ -272,26 +244,6 @@ class ImageViewerWidget(BaseWidget):
         The dataset the widget was created with (including the new images added to it).
         """
         
-        return self._source
-    
-    @property
-    def new_images(self) -> list[TaggedImage]:
-        """
-        The new images (edited copies, crops, ...) in the dataset that were made (directly or not) from the images
-        the widget was created with, including the ones made in earlier sessions.
-        """
-        
-        return [
-            image for image in self._source
-            if image.path not in self._initial_paths and self._initial_paths.intersection(image.derived_from)
-        ]
-    
-    def _new_images_dataset(self) -> Dataset:
-        """
-        The dataset, for making new images.
-        """
-        
-        assert isinstance(self._source, Dataset) and self._can_make_new_images
         return self._source
     
     @property
@@ -321,12 +273,6 @@ class ImageViewerWidget(BaseWidget):
         return max(0, min(idx, max_idx))
     
     def _build_dataset(self) -> typing.Sequence[TaggedImage]:
-        if self._can_make_new_images:
-            self._new_images_dataset().attach_new_images(
-                self._new_images_origin,
-                parents=[image for image in self._source if image.path in self._initial_paths],
-            )
-        
         # Note: preparing images may add new ones (e.g. restoring saved crops), which need to be prepared too
         while new_images := [image for image in self._source if image.path not in self._known_paths]:
             self._known_paths.update(image.path for image in new_images)
@@ -440,13 +386,6 @@ class ImageViewerWidget(BaseWidget):
         
         return True
     
-    def _makes_new_images(self) -> bool:
-        """
-        Whether the widget's main purpose is making new images (so it requires a root for them).
-        """
-        
-        return False
-    
     def _is_reviewed(self, image: TaggedImage) -> bool:
         """
         Used by `skip_reviewed`.
@@ -500,19 +439,6 @@ class ImageViewerWidget(BaseWidget):
             raise ValueError("No image is shown")
         
         image.open_viewer()
-    
-    @command
-    def edit_copy(self, msg: EditCopyRequest) -> None:
-        logger.debug(f"Edit copy {msg}")
-        
-        image = self.current_image
-        if image is None:
-            raise ValueError("No image is shown")
-        if not self._can_make_new_images:
-            raise ValueError("The widget's dataset has no mutable root")
-        
-        self._new_images_dataset().copy_for_edit(image, origin=self._new_images_origin)
-        self.refresh()
     
     @command
     def get_image(self, msg: GetImageRequest, buffers: Buffers) -> tuple[GetImageResponse, Buffers]:

@@ -29,7 +29,7 @@ from sd_toolkit.widgets import (
     QuickAction,
     TagEditorWidget,
     MaskWidget,
-    DeriveWidget,
+    ImageEditWidget,
     CropSize,
     CropWidget,
 )
@@ -90,7 +90,7 @@ __all__ = [
     "QuickAction",
     "TagEditorWidget",
     "MaskWidget",
-    "DeriveWidget",
+    "ImageEditWidget",
     "CropSize",
     "CropWidget",
     "BaseGalleryDLPost",

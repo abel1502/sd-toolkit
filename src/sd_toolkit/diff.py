@@ -11,6 +11,7 @@ import itertools
 
 from sd_toolkit.tags import Tag, Tags, TagsLike, TagFormatHook
 from sd_toolkit.dataset import Dataset, TaggedImage
+from sd_toolkit.masks import Mask
 from sd_toolkit.metadata import Metadata, MetadataField, MetadataUpdate
 
 
@@ -202,11 +203,31 @@ class DatasetDiff:
     ) -> RichText:
         result = RichText()
         
+        # The parts of the dataset besides the images
+        if self.old.roots != self.new.roots:
+            result.append_text(RichText.from_markup(">> [yellow]~roots[/]\n"))
+            result.append_text(self._pprint_lines(map(repr, self.old.roots), map(repr, self.new.roots)))
+            result.append("\n\n")
+        
+        if self.old.mask_store != self.new.mask_store:
+            result.append_text(RichText.from_markup(">> [yellow]~mask store[/]\n"))
+            result.append_text(self._pprint_lines([repr(self.old.mask_store)], [repr(self.new.mask_store)]))
+            result.append("\n\n")
+        
+        old_order = [image.path for image in self.old]
+        new_order = [image.path for image in self.new]
+        if old_order != new_order and sorted(old_order) == sorted(new_order):
+            result.append_text(RichText.from_markup(">> [yellow]~the images are in a different order[/]\n\n"))
+        
         for image in self._all_images:
+            old_masks = [self._describe_mask(mask) for mask in self.old.masks_of(image.path)]
+            new_masks = [self._describe_mask(mask) for mask in self.new.masks_of(image.path)]
+            
             if (
                 hide_unchanged and
                 image.metadata[img_diff_old_tags] == image.metadata[img_diff_new_tags] and
-                not image.metadata[diff_changed_metadata]
+                not image.metadata[diff_changed_metadata] and
+                old_masks == new_masks
             ):
                 continue
             
@@ -232,7 +253,36 @@ class DatasetDiff:
                 )
             )
             
+            if old_masks != new_masks:
+                formatted.append_text(RichText("\nmasks:\n")).append_text(self._pprint_lines(old_masks, new_masks))
+            
             result.append_text(formatted).append("\n\n")
+        
+        result.rstrip()
+        return result
+    
+    @staticmethod
+    def _describe_mask(mask: Mask) -> str:
+        return f"{mask.digest[:16]} ({mask.tags.to_hierarchical_str()})"
+    
+    @staticmethod
+    def _pprint_lines(old: typing.Iterable[str], new: typing.Iterable[str]) -> RichText:
+        """
+        Shows the lines only in `old` as removed, and the lines only in `new` as added.
+        """
+        
+        old = list(old)
+        new = list(new)
+        
+        result = RichText()
+        for line in old:
+            if line not in new:
+                result.append(f"-{line}\n", style="red")
+        for line in new:
+            if line not in old:
+                result.append(f"+{line}\n", style="green")
+            else:
+                result.append(f" {line}\n")
         
         result.rstrip()
         return result

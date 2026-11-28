@@ -204,7 +204,7 @@
             <span class="text-xs text-slate-500 truncate" title={crop.path}>{crop.path.split(/[\\/]/).pop()}</span>
           </div>
           {#if crop.locked}
-            <span title="Has derived images of its own, so it can't be changed">
+            <span title="Not made in this widget, so it can't be changed here">
               <IconLock class="w-4 h-4 text-slate-400" />
             </span>
           {:else}

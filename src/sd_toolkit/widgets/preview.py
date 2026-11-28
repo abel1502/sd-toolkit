@@ -27,8 +27,6 @@ class PreviewWidget(ImageViewerWidget):
         dataset: typing.Sequence[TaggedImage],
         *,
         info: InfoFunc | None = None,
-        edit_copies: bool = False,
-        new_images_origin: str | None = None,
         show_new_images: bool = True,
         start_idx: int = 0,
         out: ipywidgets.Output | None = None,
@@ -36,8 +34,6 @@ class PreviewWidget(ImageViewerWidget):
         """
         :param dataset: The images to show.
         :param info: Computes additional properties to display for each image.
-        :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
-        :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
         :param show_new_images: Whether to show the new images made from the images. See `ImageViewerWidget`.
         :param start_idx: The image to start at.
         :param out: If specified, the output of event handlers will be captured into it.
@@ -46,8 +42,6 @@ class PreviewWidget(ImageViewerWidget):
         super().__init__(
             dataset,
             info=info,
-            edit_copies=edit_copies,
-            new_images_origin=new_images_origin,
             show_new_images=show_new_images,
             start_idx=start_idx,
             out=out,

@@ -5,7 +5,8 @@ from .preview import PreviewWidget
 from .selection import Selection, SelectionWidget
 from .tag_editor import TagEdits, QuickAction, TagEditorWidget
 from .mask import MaskWidget
-from .derive import DeriveWidget
+from .new_images import NewImagesWidget
+from .image_edit import SavedEdits, ImageEditWidget
 from .crop import CropSize, CropWidget
 
 __all__ = [
@@ -21,7 +22,9 @@ __all__ = [
     "QuickAction",
     "TagEditorWidget",
     "MaskWidget",
-    "DeriveWidget",
+    "NewImagesWidget",
+    "SavedEdits",
+    "ImageEditWidget",
     "CropSize",
     "CropWidget",
 ]

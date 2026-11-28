@@ -28,6 +28,11 @@ class SavedMasks:
     
     # image path -> mask digest (or `None` if the mask was deleted)
     _masks: dict[pathlib.Path, str | None] = field(factory=dict)
+    mask_tags: Tags | None = None
+    """
+    The tags of the masks (see the `mask_tags` parameter of `MaskWidget`). `None` for files saved before
+    they were recorded.
+    """
     
     @classmethod
     def load_or_create(cls, path: pathlib.Path | str) -> SavedMasks:
@@ -45,6 +50,9 @@ class SavedMasks:
     
     def record(self, image: TaggedImage, digest: str | None) -> None:
         self._masks[image.path] = digest
+    
+    def digests(self) -> set[str]:
+        return {digest for digest in self._masks.values() if digest is not None}
 
 
 @define
@@ -101,8 +109,7 @@ class MaskWidget(ImageViewerWidget):
         mask_tags: TagsLike | None = None,
         select: typing.Callable[[Mask], bool] | None = None,
         saved_masks: pathlib.Path | str | None = None,
-        edit_copies: bool = False,
-        new_images_origin: str | None = None,
+        overwrite_saved_tags: bool = False,
         show_new_images: bool = True,
         info: InfoFunc | None = None,
         start_idx: int = 0,
@@ -114,9 +121,10 @@ class MaskWidget(ImageViewerWidget):
         :param select: Picks the masks to edit. Defaults to the masks tagged exactly `mask_tags`.
         :param saved_masks: The path to a file where the masks will be recorded to and restored from.
             Recommended, unless you save a dataset checkpoint right after the widget anyway (and never load
-            an earlier one). See `SavedMasks`.
-        :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
-        :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
+            an earlier one). See `SavedMasks`. The file is meant for one `mask_tags`, so that two
+            widgets can't mix up their masks by sharing it.
+        :param overwrite_saved_tags: If the file was saved with different `mask_tags`, use it anyway (and
+            record the new tags), instead of raising an error. Useful after changing `mask_tags`.
         :param show_new_images: Whether to show the new images made from the images. See `ImageViewerWidget`.
         :param info: Computes additional properties to display for each image.
         :param start_idx: The image to start at.
@@ -135,13 +143,19 @@ class MaskWidget(ImageViewerWidget):
         self._select = select
         self._saved_path = pathlib.Path(saved_masks) if saved_masks is not None else None
         self._saved = SavedMasks.load_or_create(self._saved_path) if self._saved_path is not None else SavedMasks()
+        if self._saved.mask_tags is not None and not self._saved.mask_tags.same_paths(self._mask_tags):
+            if not overwrite_saved_tags:
+                raise ValueError(
+                    f"{self._saved_path} has the masks tagged {self._saved.mask_tags.to_hierarchical_str()!r}, "
+                    f"not {self._mask_tags.to_hierarchical_str()!r} (see `overwrite_saved_tags`)"
+                )
+            logger.warning(f"Overwriting the mask tags saved in {self._saved_path}")
+        self._saved.mask_tags = self._mask_tags.clone()
         self._external = set()
         
         super().__init__(
             dataset,
             info=info,
-            edit_copies=edit_copies,
-            new_images_origin=new_images_origin,
             show_new_images=show_new_images,
             start_idx=start_idx,
             out=out,

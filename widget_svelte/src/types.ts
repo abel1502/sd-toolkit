@@ -66,7 +66,6 @@ export interface ViewerTraits {
   image_marks: number[];
   mark_styles: (MarkStyle | null)[];
   has_done_screen: boolean;
-  can_edit_copy: boolean;
   /** `null` if the widget doesn't have the switch. */
   save_unchanged: boolean | null;
 };

@@ -3,6 +3,7 @@
   import IconPencilLine from "@lucide/svelte/icons/pencil-line";
   import IconTrash from "@lucide/svelte/icons/trash-2";
   import IconRefresh from "@lucide/svelte/icons/refresh-cw";
+  import IconLock from "@lucide/svelte/icons/lock";
   import { onDestroy, untrack } from "svelte";
   import type { WidgetProps } from "./anywidget.svelte";
   import { useTrait, sendMessage, invoke } from "./anywidget.svelte";
@@ -19,6 +20,8 @@
     path: string;
     name: string;
     kind: string;
+    /** Only the copies made in this widget can be edited or deleted. */
+    locked: boolean;
     key: string;
   };
 
@@ -109,26 +112,32 @@
           <span class="text-xs text-slate-600 truncate" title={child.path}>
             <b>{child.kind}</b> {child.name}
           </span>
-          <div class="flex flex-row gap-1">
-            <Button
-              size="sm"
-              class="flex-1"
-              icon={IconPencilLine}
-              status={opening == child.path ? openStatus.state : "idle"}
-              onclick={() => openDerived(child)}
-            >
-              Edit
-            </Button>
-            <Button
-              size="sm"
-              class="flex-1"
-              variant={confirmDelete.pending == child.path ? "confirm-danger" : "danger"}
-              icon={IconTrash}
-              onclick={() => deleteDerived(child)}
-            >
-              {confirmDelete.pending == child.path ? "Sure?" : "Delete"}
-            </Button>
-          </div>
+          {#if child.locked}
+            <span class="flex flex-row items-center gap-1 text-xs text-gray-400" title="Not made in this widget, so it can't be changed here">
+              <IconLock class="w-3 h-3" /> Locked
+            </span>
+          {:else}
+            <div class="flex flex-row gap-1">
+              <Button
+                size="sm"
+                class="flex-1"
+                icon={IconPencilLine}
+                status={opening == child.path ? openStatus.state : "idle"}
+                onclick={() => openDerived(child)}
+              >
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                class="flex-1"
+                variant={confirmDelete.pending == child.path ? "confirm-danger" : "danger"}
+                icon={IconTrash}
+                onclick={() => deleteDerived(child)}
+              >
+                {confirmDelete.pending == child.path ? "Sure?" : "Delete"}
+              </Button>
+            </div>
+          {/if}
 </div>
       {:else}
         <span class="text-sm text-gray-400">None yet</span>

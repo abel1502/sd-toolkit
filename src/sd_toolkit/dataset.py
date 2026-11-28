@@ -36,7 +36,8 @@ class Dataset(typing.Sequence[TaggedImage]):
     Some roots (see `MutableRoot`) can hold new images, made from the other images of the dataset
     (e.g. edited copies or crops). When a new image enters the dataset, it's placed right after the image
     it was made from (and its other new images). It doesn't inherit anything from it (neither the tags nor
-    the metadata): new images start untagged.
+    the metadata): new images start untagged. The dataset is the source of truth for which new images
+    exist (loading a mutable root doesn't load any).
     """
     
     roots: list[Root]
@@ -74,7 +75,8 @@ class Dataset(typing.Sequence[TaggedImage]):
         :param masks: The directory to store the masks in (see `MaskStore`). Masks can't be added without one.
         :param checkpoint: If specified, the dataset is loaded from this checkpoint file instead of the roots
             (if the file exists), or saved to it after loading. See `checkpoint` (the `checkpoint_*` parameters
-            are the same as its parameters).
+            are the same as its parameters). The roots and the mask store saved in the checkpoint take
+            precedence over the specified ones.
         """
         
         self.__attrs_init__(
@@ -154,11 +156,11 @@ class Dataset(typing.Sequence[TaggedImage]):
     def has_mutable_root(self, origin: str | None = None) -> bool:
         return any(root.is_mutable and (origin is None or root.name == origin) for root in self.roots)
     
-    def _root_of(self, image: TaggedImage) -> MutableRoot:
+    def _root_of(self, path: pathlib.Path) -> MutableRoot:
         for root in self.roots:
-            if isinstance(root, MutableRoot) and image.path.is_relative_to(root.path):
+            if isinstance(root, MutableRoot) and path.is_relative_to(root.path):
                 return root
-        raise ValueError(f"{image.path} is not in any mutable root")
+        raise ValueError(f"{path} is not in any mutable root")
     
     def _find(self, path: pathlib.Path) -> TaggedImage | None:
         found = [image for image in self.contents if image.path == path]
@@ -185,7 +187,12 @@ class Dataset(typing.Sequence[TaggedImage]):
                 continue
             
             idx += 1
-            while idx < len(self.contents) and ancestor in self.contents[idx].derived_from:
+            # Skip the ancestor's other new images, but not the ones made from this image (if it's re-added)
+            while (
+                idx < len(self.contents) and
+                ancestor in self.contents[idx].derived_from and
+                image.path not in self.contents[idx].derived_from
+            ):
                 idx += 1
             
             self.contents.insert(idx, image)
@@ -209,36 +216,29 @@ class Dataset(typing.Sequence[TaggedImage]):
         self.contents = [other for other in self.contents if other.path != image.path]
         self.masks.pop(image.path, None)
     
-    def attach_new_images(
+    def attach_new_image(
         self,
-        origin: str | None = None,
+        parent: TaggedImage,
+        path: pathlib.Path,
         *,
-        parents: typing.Iterable[TaggedImage] | None = None,
-    ) -> list[TaggedImage]:
+        metadata: typing.Iterable[MetadataUpdate] = (),
+    ) -> TaggedImage:
         """
-        Adds the images of a mutable root whose ancestors are in the dataset, but which aren't in the dataset
-        themselves. This is useful after loading a checkpoint that was saved before the new images were made.
-        Widgets that can make new images do this automatically.
+        Adds an existing new image made from `parent` (e.g. in an earlier session) to the dataset, untagged.
+        If it's in the dataset already, that image is returned instead. The file must be in a mutable root.
         
-        :param origin: The root's name. See `mutable_root`.
-        :param parents: If specified, only the images made (directly or indirectly) from these are added.
-        :returns: All the images of the root made from `parents` (or from any image of the dataset), whether they
-            were already in the dataset or not.
+        :param metadata: The image's metadata (besides `img_derived_from`).
         """
         
-        root = self.mutable_root(origin)
-        ancestors = {image.path for image in (self.contents if parents is None else parents)}
+        image = TaggedImage(
+            path=path,
+            tags=Tags(),
+        ).apply_metadata(
+            img_derived_from.set((*parent.derived_from, parent.path)),
+            *metadata,
+        )
         
-        result: list[TaggedImage] = []
-        for image in sorted(root.load(), key=lambda image: len(image.derived_from)):
-            if not ancestors.intersection(image.derived_from):
-                continue
-            
-            image = self._attach(image)
-            ancestors.add(image.path)
-            result.append(image)
-        
-        return result
+        return self._attach(self._root_of(path).record(image))
     
     def add_new_image(
         self,
@@ -267,25 +267,12 @@ class Dataset(typing.Sequence[TaggedImage]):
         root = self.mutable_root(origin)
         path = root.new_path(parent, label, suffix=suffix, key=key)
         
-        if key is not None and (existing := root.get(path)) is not None:
-            if existing.path.is_file():
-                return self._attach(existing)
-            # The file was deleted, but the entry wasn't
-            root.remove(path, delete_file=False)
+        if key is None or not path.is_file():
+            write(path)
+            if not path.is_file():
+                raise RuntimeError(f"`write` did not create {path}")
         
-        write(path)
-        if not path.is_file():
-            raise RuntimeError(f"`write` did not create {path}")
-        
-        image = TaggedImage(
-            path=path,
-            tags=Tags(),
-        ).apply_metadata(
-            img_derived_from.set((*parent.derived_from, parent.path)),
-            *metadata,
-        )
-        
-        return self._attach(root.add(image))
+        return self.attach_new_image(parent, path, metadata=metadata)
     
     def copy_for_edit(
         self,
@@ -360,16 +347,31 @@ class Dataset(typing.Sequence[TaggedImage]):
         :param delete_file: Whether to also delete the file.
         """
         
-        self._root_of(image).remove(image.path, delete_file=delete_file)
+        self._root_of(image.path).forget(image.path, delete_file=delete_file)
         self._detach(image)
     
     def children_of(self, image: TaggedImage | pathlib.Path) -> list[TaggedImage]:
         """
         :returns: The images of the dataset made directly from `image`.
+        
+        .. Note::
+            Goes through the whole dataset, use `children_map` for many images.
         """
         
         path = image.path if isinstance(image, TaggedImage) else image
         return [other for other in self.contents if other.parent() == path]
+    
+    def children_map(self) -> dict[pathlib.Path, list[TaggedImage]]:
+        """
+        :returns: The images of the dataset made directly from each image (by its path). Images without
+            children are omitted.
+        """
+        
+        result: dict[pathlib.Path, list[TaggedImage]] = {}
+        for image in self.contents:
+            if (parent := image.parent()) is not None:
+                result.setdefault(parent, []).append(image)
+        return result
     
     # Masks
     
@@ -422,6 +424,54 @@ class Dataset(typing.Sequence[TaggedImage]):
             self.masks[path] = image_masks
         else:
             self.masks.pop(path, None)
+    
+    def prune_masks(
+        self,
+        *checkpoints: pathlib.Path | str,
+        saved_masks: typing.Iterable[pathlib.Path | str] = (),
+        wildcard: bool = True,
+        dry_run: bool = False,
+    ) -> list[pathlib.Path]:
+        """
+        Deletes the mask files of the dataset's mask store that aren't used by this dataset, the given checkpoints,
+        or the given saved masks files (see `SavedMasks`). The documents for editing masks externally are kept.
+        
+        Make sure to list all the checkpoints and saved masks files that use the mask store (e.g. of other
+        notebooks sharing it), the masks used only by the others are deleted otherwise.
+        
+        :param checkpoints: The paths of the dataset checkpoints. With `wildcard`, can be glob patterns
+            (e.g. `"checkpoints/*.bin"`).
+        :param saved_masks: The paths of the `SavedMasks` files (also glob patterns, with `wildcard`).
+        :param wildcard: Whether to expand the glob patterns in the paths. A pattern matching nothing is an error.
+        :param dry_run: Only log the files that would be deleted.
+        :returns: The deleted files (or the ones that would be deleted).
+        """
+        
+        from sd_toolkit.widgets.mask import SavedMasks
+        
+        if self.mask_store is None:
+            raise ValueError(f"{self!r} has no mask store")
+        
+        used = {mask.digest for image_masks in self.masks.values() for mask in image_masks}
+        
+        for path in _expand_paths(checkpoints, wildcard=wildcard):
+            used.update(mask.digest for image_masks in self._read_checkpoint(path).masks.values() for mask in image_masks)
+        
+        for path in _expand_paths(saved_masks, wildcard=wildcard):
+            used.update(SavedMasks.load_or_create(path).digests())
+        
+        unused = [file for file in sorted(self.mask_store.root.glob("*.png")) if file.stem not in used]
+        
+        for file in unused:
+            if dry_run:
+                logger.info(f"Would delete the unused mask {file}")
+            else:
+                logger.debug(f"Deleting the unused mask {file}")
+                file.unlink()
+        
+        logger.info(f"{"Would delete" if dry_run else "Deleted"} {len(unused)} unused masks (kept {len(used)})")
+        
+        return unused
     
     # Misc
     
@@ -580,8 +630,8 @@ class Dataset(typing.Sequence[TaggedImage]):
     
     def load_checkpoint(self, path: pathlib.Path | str) -> None:
         """
-        Replaces the dataset's contents with the ones saved in a checkpoint. The mask store is kept,
-        unless the dataset doesn't have one.
+        Replaces the dataset's contents (including the roots and the mask store) with the ones saved in a
+        checkpoint. The current mask store is only kept if the checkpoint doesn't have one.
         """
         
         self._assign_from(self._read_checkpoint(path))
@@ -624,10 +674,10 @@ class Dataset(typing.Sequence[TaggedImage]):
         self.roots = other.roots
         self.contents = other.contents
         self.masks = other.masks
-        if self.mask_store is None:
+        if other.mask_store is not None:
+            if self.mask_store is not None and other.mask_store != self.mask_store:
+                logger.warning(f"Using the saved mask store {other.mask_store.root} instead of {self.mask_store.root}")
             self.mask_store = other.mask_store
-        elif other.mask_store is not None and other.mask_store != self.mask_store:
-            logger.info(f"Using the mask store {self.mask_store.root} instead of {other.mask_store.root}")
         self._bind_masks()
     
     @typing.overload
@@ -837,6 +887,29 @@ class Dataset(typing.Sequence[TaggedImage]):
         }
 
 
+def _expand_paths(paths: typing.Iterable[pathlib.Path | str], *, wildcard: bool) -> list[pathlib.Path]:
+    result: list[pathlib.Path] = []
+    
+    for path in paths:
+        path = pathlib.Path(path)
+        
+        if not wildcard or not any(char in str(path) for char in "*?["):
+            if not path.is_file():
+                raise FileNotFoundError(f"{path} does not exist")
+            result.append(path)
+            continue
+        
+        # `Path.glob` only takes relative patterns
+        base = pathlib.Path(path.anchor) if path.anchor else pathlib.Path()
+        pattern = pathlib.Path(*path.parts[1:]) if path.anchor else path
+        matches = sorted(match for match in base.glob(str(pattern)) if match.is_file())
+        if not matches:
+            raise FileNotFoundError(f"{path} doesn't match any files")
+        result.extend(matches)
+    
+    return result
+
+
 @CBOR_CONVERTER.register_unstructure_hook
 def _unstructure_Dataset(dataset: Dataset) -> dict[str, typing.Any]:
     return dict(
@@ -887,9 +960,11 @@ def _infer_gallery_dl_root(path: pathlib.Path, contents: list[dict[str, typing.A
     """
     Infers the post type from the saved posts of the root's images (see `img_gallery_dl_post`), or, failing that,
     from the origins of their tags (`BaseGalleryDLPost.extract_tags` sets them to the post type's name).
-    `save_full_metadata` is inferred from whether there are saved posts.
+    If there are several post types, `UnknownPost` is used. `save_full_metadata` is inferred from whether there
+    are saved posts.
     """
     
+    from sd_toolkit.gallery_dl import UnknownPost
     from sd_toolkit.gallery_dl.base import BaseGalleryDLPost, _TYPE_KEY
     from sd_toolkit.tags import tag_origin
     
@@ -914,10 +989,13 @@ def _infer_gallery_dl_root(path: pathlib.Path, contents: list[dict[str, typing.A
         logger.warning(f"Couldn't infer the post type of the gallery-dl root {path} (no saved posts or tag origins), migrating it as a `RawRoot`")
         return RawRoot(path)
     
+    post_type: str
     if len(post_types) > 1:
-        logger.warning(f"The images of {path} have multiple post types: {dict(post_types)!r}, using the most common one")
+        post_type = UnknownPost.ORIGIN_NAME
+        logger.warning(f"The images of {path} have multiple post types: {dict(post_types)!r}, using {post_type!r}")
+    else:
+        [post_type] = post_types
     
-    post_type, _ = post_types.most_common(1)[0]
     return GalleryDLRoot(path, post_type, save_full_metadata=save_full_metadata)
 
 

@@ -107,8 +107,6 @@ class SelectionWidget(ImageViewerWidget):
         skip_reviewed: bool = True,
         auto_advance: bool = True,
         info: InfoFunc | None = None,
-        edit_copies: bool = False,
-        new_images_origin: str | None = None,
         show_new_images: bool = True,
         out: ipywidgets.Output | None = None,
     ):
@@ -120,8 +118,6 @@ class SelectionWidget(ImageViewerWidget):
         :param skip_reviewed: If `True`, the widget starts at the first image without an explicit choice.
         :param auto_advance: If `True`, making a choice advances to the next image.
         :param info: Computes additional properties to display for each image.
-        :param edit_copies: Whether to allow creating edited copies of the images. See `ImageViewerWidget`.
-        :param new_images_origin: The root to store new images in. See `ImageViewerWidget`.
         :param show_new_images: Whether to show the new images made from the images. See `ImageViewerWidget`.
         :param out: If specified, the output of event handlers will be captured into it.
         """
@@ -131,8 +127,6 @@ class SelectionWidget(ImageViewerWidget):
         super().__init__(
             dataset,
             info=info,
-            edit_copies=edit_copies,
-            new_images_origin=new_images_origin,
             show_new_images=show_new_images,
             skip_reviewed=skip_reviewed,
             out=out,

@@ -5,7 +5,7 @@ import PreviewWidget from "./PreviewWidget.svelte";
 import SelectionWidget from "./SelectionWidget.svelte";
 import TagEditorWidget from "./TagEditorWidget.svelte";
 import MaskWidget from "./MaskWidget.svelte";
-import DeriveWidget from "./DeriveWidget.svelte";
+import ImageEditWidget from "./ImageEditWidget.svelte";
 import CropWidget from "./CropWidget.svelte";
 import "./app.css";
 
@@ -16,6 +16,6 @@ export default defineWidget({
   selection: SelectionWidget,
   tag_editor: TagEditorWidget,
   mask: MaskWidget,
-  derive: DeriveWidget,
+  image_edit: ImageEditWidget,
   crop: CropWidget,
 });
